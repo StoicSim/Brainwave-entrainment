@@ -24,7 +24,7 @@ async def test_all_notifications():
         for uuid in NOTIFY_UUIDS:
             print(f"Subscribing to {uuid} for 10 seconds...")
             await client.start_notify(uuid, handle_notify)
-            await asyncio.sleep(10)
+            await asyncio.sleep(3)
             await client.stop_notify(uuid)
             print(f"Stopped {uuid}\n")
 
