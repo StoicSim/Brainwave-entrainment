@@ -9,7 +9,7 @@ async def inspect_services():
     device = await BleakScanner.find_device_by_address(TARGET_ADDR, timeout=15)
 
     if device is None:
-        print("❌ Device not found during search")
+        print(" Device not found during search")
         return
 
     print(f"Found: {device.address} ({device.name})")
@@ -19,16 +19,16 @@ async def inspect_services():
 
     try:
         await client.connect(timeout=10)
-        print("✅ Connected!")
+        print(" Connected!")
 
         services = client.services  # New bleak API
         for service in services:
-            print(f"🔵 Service: {service.uuid}")
+            print(f" Service: {service.uuid}")
             for char in service.characteristics:
-                print(f"   🟢 Char: {char.uuid} | {char.properties}")
+                print(f"    Char: {char.uuid} | {char.properties}")
 
     except Exception as e:
-        print("❌ Error:", e)
+        print(" Error:", e)
 
     finally:
         await client.disconnect()
