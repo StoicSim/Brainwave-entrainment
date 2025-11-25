@@ -118,6 +118,11 @@ export const connectAndMonitor = async (device, onDataReceived) => {
             // Decode base64 to bytes
             const rawBytes = Buffer.from(characteristic.value, 'base64');
             
+            // Log first few bytes for debugging (only first 10 times)
+            if (decoder.packetCount < 10) {
+              console.log('Raw bytes:', Array.from(rawBytes.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            }
+            
             // Parse ThinkGear stream
             const packets = decoder.parseStream(rawBytes);
             
@@ -125,10 +130,19 @@ export const connectAndMonitor = async (device, onDataReceived) => {
             packets.forEach(packet => {
               if (packet.checksumValid) {
                 onDataReceived(packet.data);
-              } else {
-                console.warn('Invalid checksum in packet');
+                
+                // Log successful packet (first 5 only)
+                if (decoder.packetCount <= 5) {
+                  console.log('✓ Valid packet #' + packet.packetNumber + ':', packet.data);
+                }
               }
             });
+            
+            // Log decoder stats every 50 packets
+            if (decoder.packetCount % 50 === 0 && decoder.packetCount > 0) {
+              const stats = decoder.getStats();
+              console.log('Decoder stats:', stats);
+            }
           } catch (err) {
             console.error('Decoding error:', err);
           }

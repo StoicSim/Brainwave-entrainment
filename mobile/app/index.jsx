@@ -37,7 +37,7 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Step 1: BLE Connection & Visualization</Text>
+        <Text style={styles.footerText}>Connect your mind to the waves</Text>
         <Text style={styles.footerSubtext}>
           Next steps: Cloud storage → AI tone generation
         </Text>

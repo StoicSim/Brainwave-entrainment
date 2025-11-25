@@ -4,42 +4,46 @@ import { BLE_CONFIG } from '../constants/BleConfig';
 
 /**
  * Complete ThinkGear Protocol Decoder
- * Matches the Python implementation exactly
+ * Handles TWO packet formats from your device:
+ * 1. Simple: [0xAA 0xAA] [0x04] [0x80 0x02] [raw_eeg_hi] [raw_eeg_lo] [checksum]
+ * 2. Full: [0xAA 0xAA] [0x20] [0x02] [signal] [0x83 0x18] [24 bytes bands] [checksum]
  */
 
 class ThinkGearDecoder {
   constructor() {
     this.buffer = [];
     this.SYNC_BYTES = BLE_CONFIG.SYNC_BYTES;
-    this.CODE_LENGTHS = BLE_CONFIG.CODE_LENGTHS;
+    this.packetCount = 0;
+    this.errorCount = 0;
+    this.lastBandPowers = null; // Cache last band powers
   }
 
   /**
    * Parse incoming byte stream and extract complete packets
-   * @param {Uint8Array|Array} data - Raw bytes from BLE characteristic
-   * @returns {Array} Array of parsed packet objects
    */
   parseStream(data) {
-    // Add incoming bytes to buffer
     this.buffer.push(...Array.from(data));
     
     const results = [];
     let i = 0;
 
-    while (i < this.buffer.length - 2) {
-      // Look for sync bytes (0xAA 0xAA)
+    while (i < this.buffer.length - 3) {
+      // Look for sync bytes
       if (this.buffer[i] !== 0xAA || this.buffer[i + 1] !== 0xAA) {
         i++;
         continue;
       }
 
-      // Check if we have enough data for payload length
-      if (i + 4 > this.buffer.length) {
-        break;
+      // Get payload length
+      const payloadLength = this.buffer[i + 2];
+      
+      // Validate payload length
+      if (payloadLength < 1 || payloadLength > 169) {
+        i += 2;
+        continue;
       }
 
-      const payloadLength = this.buffer[i + 2];
-      const packetEnd = i + 3 + payloadLength + 1; // sync(2) + len(1) + payload + checksum(1)
+      const packetEnd = i + 3 + payloadLength + 1;
 
       // Wait for complete packet
       if (packetEnd > this.buffer.length) {
@@ -48,42 +52,63 @@ class ThinkGearDecoder {
 
       // Extract packet
       const packet = this.buffer.slice(i, packetEnd);
-      const payload = packet.slice(3, -1); // Remove sync, length, and checksum
+      const payload = packet.slice(3, -1);
       const receivedChecksum = packet[packet.length - 1];
 
-      // Verify checksum
-      const calculatedChecksum = this.calculateChecksum(payload);
+      // Calculate checksum
+      let sum = 0;
+      for (let j = 0; j < payload.length; j++) {
+        sum += payload[j];
+      }
+      const calculatedChecksum = (~sum) & 0xFF;
+      
       const isValid = calculatedChecksum === receivedChecksum;
+
+      if (!isValid) {
+        if (this.errorCount < 3) {
+          console.log(
+            `Checksum mismatch at packet #${this.packetCount + 1}: ` +
+            `calc=0x${calculatedChecksum.toString(16)}, recv=0x${receivedChecksum.toString(16)}`
+          );
+        }
+        this.errorCount++;
+        i++;
+        continue;
+      }
+
+      // Valid packet!
+      this.errorCount = 0;
+      this.packetCount++;
 
       // Parse payload
       const parsedData = this.parsePayload(payload);
       
-      results.push({
-        timestamp: new Date().toISOString(),
-        data: parsedData,
-        checksumValid: isValid,
-        rawPacket: packet
-      });
+      // Only return packets with data
+      if (Object.keys(parsedData).length > 0) {
+        results.push({
+          timestamp: new Date().toISOString(),
+          data: parsedData,
+          checksumValid: true,
+          packetNumber: this.packetCount,
+        });
+      }
 
       i = packetEnd;
     }
 
-    // Remove processed bytes from buffer
+    // Clean buffer
     this.buffer = this.buffer.slice(i);
+    
+    if (this.buffer.length > 1000) {
+      console.warn('Buffer overflow, clearing');
+      this.buffer = this.buffer.slice(-500);
+    }
 
     return results;
   }
 
   /**
-   * Calculate ThinkGear checksum
-   */
-  calculateChecksum(payload) {
-    const sum = payload.reduce((acc, byte) => acc + byte, 0);
-    return 0xFF - (sum & 0xFF);
-  }
-
-  /**
-   * Parse payload bytes into meaningful data
+   * Parse payload into meaningful data
    */
   parsePayload(payload) {
     const parsed = {};
@@ -93,39 +118,81 @@ class ThinkGearDecoder {
       const code = payload[j];
       j++;
 
-      const length = this.CODE_LENGTHS[code];
-      if (length === undefined) {
-        // Unknown code, skip
+      // Skip extended code prefix
+      if (code === 0x55) {
         continue;
       }
 
-      if (j + length > payload.length) {
-        break;
-      }
-
-      const valueBytes = payload.slice(j, j + length);
-      j += length;
-
-      // Decode based on code
       switch (code) {
-        case 0x02: // Poor Signal Quality (0-200)
-          parsed.poorSignal = valueBytes[0];
+        case 0x02: // Poor Signal Quality
+          if (j < payload.length) {
+            parsed.poorSignal = payload[j];
+            j++;
+          }
           break;
 
-        case 0x04: // Attention eSense (0-100)
-          parsed.attention = valueBytes[0];
+        case 0x04: // Attention eSense
+          if (j < payload.length) {
+            parsed.attention = payload[j];
+            j++;
+          }
           break;
 
-        case 0x05: // Meditation eSense (0-100)
-          parsed.meditation = valueBytes[0];
+        case 0x05: // Meditation eSense
+          if (j < payload.length) {
+            parsed.meditation = payload[j];
+            j++;
+          }
           break;
 
-        case 0x80: // Raw EEG (16-bit signed integer)
-          parsed.rawEEG = this.bytesToSignedInt16(valueBytes);
+        case 0x80: // Raw EEG (2 bytes)
+          if (j + 1 < payload.length) {
+            // Skip the length byte (0x02)
+            if (payload[j] === 0x02) {
+              j++;
+            }
+            // Read 2-byte signed integer
+            if (j + 1 < payload.length) {
+              const hi = payload[j];
+              const lo = payload[j + 1];
+              const value = (hi << 8) | lo;
+              parsed.rawEEG = value > 32767 ? value - 65536 : value;
+              j += 2;
+            }
+          }
           break;
 
-        case 0x83: // EEG Power Bands (8 bands × 3 bytes each)
-          parsed.eegBands = this.parseEEGBands(valueBytes);
+        case 0x83: // EEG Power Bands (24 bytes)
+          // Next byte should be length (0x18 = 24)
+          if (j < payload.length) {
+            const bandLength = payload[j];
+            j++;
+            
+            if (bandLength === 24 && j + 24 <= payload.length) {
+              const bandBytes = payload.slice(j, j + 24);
+              parsed.eegBands = this.parseEEGBands(bandBytes);
+              
+              // Cache for future packets
+              this.lastBandPowers = parsed.eegBands;
+              
+              j += 24;
+            } else {
+              console.warn(`Unexpected EEG band length: ${bandLength}`);
+              j += Math.min(bandLength, payload.length - j);
+            }
+          }
+          break;
+
+        default:
+          // Unknown code - try to skip gracefully
+          if (j < payload.length) {
+            const possibleLength = payload[j];
+            if (possibleLength < 170 && j + possibleLength < payload.length) {
+              j += possibleLength + 1;
+            } else {
+              j++;
+            }
+          }
           break;
       }
     }
@@ -134,23 +201,20 @@ class ThinkGearDecoder {
   }
 
   /**
-   * Convert 2 bytes to signed 16-bit integer (big-endian)
-   */
-  bytesToSignedInt16(bytes) {
-    const value = (bytes[0] << 8) | bytes[1];
-    // Convert to signed
-    return value > 32767 ? value - 65536 : value;
-  }
-
-  /**
-   * Parse EEG band power values (24 bytes = 8 bands × 3 bytes)
+   * Parse 24-byte EEG band powers
    */
   parseEEGBands(bytes) {
+    if (bytes.length < 24) {
+      console.warn(`Incomplete EEG band data: ${bytes.length} bytes`);
+      return null;
+    }
+
     const bands = BLE_CONFIG.EEG_BANDS;
     const powers = {};
 
-    for (let i = 0; i < bands.length; i++) {
+    for (let i = 0; i < 8; i++) {
       const offset = i * 3;
+      // 3-byte big-endian unsigned integer
       const value = (bytes[offset] << 16) | (bytes[offset + 1] << 8) | bytes[offset + 2];
       powers[bands[i]] = value;
     }
@@ -159,10 +223,29 @@ class ThinkGearDecoder {
   }
 
   /**
+   * Get decoder statistics
+   */
+  getStats() {
+    return {
+      packetCount: this.packetCount,
+      errorCount: this.errorCount,
+      bufferSize: this.buffer.length,
+      successRate: this.packetCount > 0 
+        ? ((this.packetCount / (this.packetCount + this.errorCount)) * 100).toFixed(1) + '%'
+        : '0%',
+      hasBandPowers: this.lastBandPowers !== null
+    };
+  }
+
+  /**
    * Reset decoder state
    */
   reset() {
     this.buffer = [];
+    this.packetCount = 0;
+    this.errorCount = 0;
+    this.lastBandPowers = null;
+    console.log('ThinkGear decoder reset');
   }
 }
 
