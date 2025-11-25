@@ -1,199 +1,203 @@
+// mobile/services/BleService.js
+
 import { BleManager } from 'react-native-ble-plx';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { Buffer } from 'buffer';
-
-// Import the decoder logic (which we will create in the next step)
-import { parseAndDecodeStream } from '../utils/ThinkGearDecoder'; 
+import { decoder } from '../utils/ThinkGearDecoder';
+import { BLE_CONFIG } from '../constants/BleConfig';
 
 const manager = new BleManager();
 
-// --- EEG DEVICE CONFIGURATION (Update these based on your specific device) ---
-export const DEVICE_MAC_ADDRESS = '34:81:F4:33:AE:91'; 
-export const DEVICE_NAME_FILTER = null; 
-
-// Service UUIDs you suspect are involved. We use the first one as the data channel guess.
-export const DATA_SERVICE_UUIDS = [
-    "49535343-aca3-481c-91ec-d85e28a60318", 
-    "49535343-1e4d-4bd9-ba61-23c647249616",
-    "49535343-026e-3a9b-954c-97daef17e26e"
-]; 
-
-// CRITICAL FIX: We assume the main data channel uses the first Service UUID for both service and characteristic.
-export const DATA_SERVICE_UUID = DATA_SERVICE_UUIDS[0];
-export const DATA_CHARACTERISTIC_UUID = DATA_SERVICE_UUIDS[0]; 
-// ----------------------------------------------------------------------------
-
-
+/**
+ * Request necessary Bluetooth permissions
+ */
 const requestPermissions = async () => {
-    // Android permissions logic
-    if (Platform.OS === 'android') {
-        if (Platform.Version >= 31) { // Android 12+
-            const grantedScan = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN
-            );
-            const grantedConnect = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT
-            );
-            return grantedScan === PermissionsAndroid.RESULTS.GRANTED && grantedConnect === PermissionsAndroid.RESULTS.GRANTED;
-        } else { // Android 11-
-            const grantedLocation = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-            );
-            return grantedLocation === PermissionsAndroid.RESULTS.GRANTED;
+  if (Platform.OS === 'android') {
+    if (Platform.Version >= 31) {
+      // Android 12+
+      const grantedScan = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        {
+          title: 'Bluetooth Scan Permission',
+          message: 'This app needs Bluetooth scan permission to find your EEG device',
+          buttonPositive: 'OK',
         }
+      );
+      const grantedConnect = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        {
+          title: 'Bluetooth Connect Permission',
+          message: 'This app needs Bluetooth connect permission to connect to your EEG device',
+          buttonPositive: 'OK',
+        }
+      );
+      return (
+        grantedScan === PermissionsAndroid.RESULTS.GRANTED &&
+        grantedConnect === PermissionsAndroid.RESULTS.GRANTED
+      );
+    } else {
+      // Android 11 and below
+      const grantedLocation = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: 'Location Permission',
+          message: 'Bluetooth scanning requires location permission on Android',
+          buttonPositive: 'OK',
+        }
+      );
+      return grantedLocation === PermissionsAndroid.RESULTS.GRANTED;
     }
-    return true; // iOS handles permissions in app.json
+  }
+  return true; // iOS handles permissions via Info.plist
 };
 
-
-// --- Core BLE Logic ---
-
 /**
- * Scans for the device using its MAC address or name filter.
- * @param {(device) => void} onDeviceFound - Callback when the device is found.
+ * Scan for the EMI device
  */
 export const scanAndConnect = async (onDeviceFound) => {
-    const isPermitted = await requestPermissions();
-    if (!isPermitted) {
-        throw new Error("Bluetooth permissions not granted.");
-    }
-    
-    // Start scanning
-    manager.startDeviceScan(
-        DATA_SERVICE_UUIDS, // Scan filter only for devices offering these services
-        null, // Options
-        (error, device) => {
-            if (error) {
-                console.error("Scanning Error:", error);
-                manager.stopDeviceScan();
-                throw error;
-            }
-            
-            // Found the target device (match by MAC address)
-            if (device.id === DEVICE_MAC_ADDRESS || (DEVICE_NAME_FILTER && device.name === DEVICE_NAME_FILTER)) {
-                manager.stopDeviceScan();
-                onDeviceFound(device); // Callback to the UI layer
-            }
-        }
-    );
-};
+  const isPermitted = await requestPermissions();
+  if (!isPermitted) {
+    throw new Error('Bluetooth permissions not granted');
+  }
 
-/**
- * Connects to the device and starts monitoring the characteristic.
- * @param {Device} device - The device object found during scan.
- * @param {(parsedData) => void} onDataParsed - Callback when a complete EEG packet is decoded.
- */
-export const connectAndMonitor = async (device, onDataParsed) => {
-    try {
-        // Stop any residual scanning
-        manager.stopDeviceScan(); 
-        
-        // 1. Connect
-        const connectedDevice = await device.connect();
-        
-        // 2. Discover
-        await connectedDevice.discoverAllServicesAndCharacteristics();
-        
-        // 3. Monitor
-        connectedDevice.monitorCharacteristicForService(
-            DATA_SERVICE_UUID,        // The Service that contains the characteristic
-            DATA_CHARACTERISTIC_UUID, // The Characteristic that holds the data
-            (error, characteristic) => {
-                if (error) {
-                    console.error("Data monitoring error:", error);
-                    return;
-                }
-                
-                if (characteristic.value) {
-                    // Data is in characteristic.value (Base64 string)
-                    const rawBytes = Buffer.from(characteristic.value, 'base64');
-                    const byteList = Array.from(rawBytes); 
-                    
-                    // Call the ThinkGear decoder
-                    const parsedData = parseAndDecodeStream(byteList);
-                    
-                    // If the decoder returned a complete packet, send it to the UI
-                    if (parsedData) {
-                        onDataParsed(parsedData); 
-                    }
-                }
-            }
-        );
-        
-        return connectedDevice; // Return the device for connection management
-        
-    } catch (error) {
-        console.error('Connection/Streaming Error:', error);
+  console.log('Starting BLE scan...');
+  
+  manager.startDeviceScan(
+    null, // Scan all devices (filter by MAC/name later)
+    { allowDuplicates: false },
+    (error, device) => {
+      if (error) {
+        console.error('Scanning Error:', error);
+        manager.stopDeviceScan();
         throw error;
+      }
+
+      // Match by MAC address or name
+      const matchesMac = device.id === BLE_CONFIG.DEVICE_MAC_ADDRESS;
+      const matchesName = BLE_CONFIG.DEVICE_NAME_FILTER && 
+                          device.name === BLE_CONFIG.DEVICE_NAME_FILTER;
+
+      if (matchesMac || matchesName) {
+        console.log(`Found target device: ${device.name} (${device.id})`);
+        manager.stopDeviceScan();
+        onDeviceFound(device);
+      }
     }
+  );
 };
 
 /**
- * Connects to the device, discovers all services and characteristics, and logs the details.
- * This is the function to use to debug which UUIDs are correct.
- * @param {Device} device - The device object found during scan.
+ * Connect to device and start monitoring data
+ */
+export const connectAndMonitor = async (device, onDataReceived) => {
+  try {
+    manager.stopDeviceScan();
+
+    console.log('Connecting to device...');
+    const connectedDevice = await device.connect();
+    console.log('Connected! Discovering services...');
+
+    await connectedDevice.discoverAllServicesAndCharacteristics();
+    console.log('Services discovered. Starting data stream...');
+
+    // Reset decoder state
+    decoder.reset();
+
+    // Start monitoring the characteristic
+    connectedDevice.monitorCharacteristicForService(
+      BLE_CONFIG.DATA_SERVICE_UUID,
+      BLE_CONFIG.DATA_CHARACTERISTIC_UUID,
+      (error, characteristic) => {
+        if (error) {
+          console.error('Monitoring error:', error);
+          return;
+        }
+
+        if (characteristic?.value) {
+          try {
+            // Decode base64 to bytes
+            const rawBytes = Buffer.from(characteristic.value, 'base64');
+            
+            // Parse ThinkGear stream
+            const packets = decoder.parseStream(rawBytes);
+            
+            // Send each parsed packet to the callback
+            packets.forEach(packet => {
+              if (packet.checksumValid) {
+                onDataReceived(packet.data);
+              } else {
+                console.warn('Invalid checksum in packet');
+              }
+            });
+          } catch (err) {
+            console.error('Decoding error:', err);
+          }
+        }
+      }
+    );
+
+    return connectedDevice;
+  } catch (error) {
+    console.error('Connection/Streaming Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Disconnect from device
+ */
+export const disconnectDevice = async (device) => {
+  if (device) {
+    try {
+      await device.cancelConnection();
+      decoder.reset();
+      console.log('Disconnected successfully');
+    } catch (error) {
+      console.error('Disconnect error:', error);
+    }
+  }
+};
+
+/**
+ * Debug function: Discover all services and characteristics
  */
 export const discoverDeviceDetails = async (device) => {
-    let connectedDevice = null;
-    try {
-        console.log(`Starting discovery for device: ${device.id}`);
+  let connectedDevice = null;
+  try {
+    console.log(`Discovering details for: ${device.id}`);
+    
+    connectedDevice = await device.connect();
+    await connectedDevice.discoverAllServicesAndCharacteristics();
+    
+    const services = await connectedDevice.services();
+    const detailMap = {};
 
-        // 1. Connect
-        connectedDevice = await device.connect();
-        console.log('Connected.');
-        
-        // 2. Discover all services and characteristics
-        await connectedDevice.discoverAllServicesAndCharacteristics();
-        console.log('Discovered all services and characteristics.');
-
-        // 3. Fetch services
-        const services = await connectedDevice.services();
-        const detailMap = {};
-        
-        // 
-
-        for (const service of services) {
-            const characteristics = await service.characteristics();
-            
-            const chars = characteristics.map(char => ({
-                uuid: char.uuid,
-                isNotifiable: char.isReadable ? char.isNotifiable : false, // Check if the char is notifiable/readable
-                isReadable: char.isReadable,
-                isWritable: char.isWritable,
-            }));
-
-            detailMap[service.uuid] = {
-                serviceUUID: service.uuid,
-                characteristics: chars
-            };
-        }
-
-        console.log('--- DEVICE SERVICE AND CHARACTERISTIC MAP ---');
-        console.log(JSON.stringify(detailMap, null, 2));
-        console.log('---------------------------------------------');
-        console.log('Review the output above. The data stream characteristic is likely the one marked "isNotifiable: true".');
-        
-        return detailMap;
-
-    } catch (error) {
-        console.error('Discovery Error:', error);
-        throw error;
-    } finally {
-        if (connectedDevice) {
-            // Ensure we disconnect gracefully
-            await connectedDevice.cancelConnection().catch(e => console.warn("Failed to disconnect:", e));
-            console.log('Disconnected after discovery.');
-        }
+    for (const service of services) {
+      const characteristics = await service.characteristics();
+      detailMap[service.uuid] = {
+        serviceUUID: service.uuid,
+        characteristics: characteristics.map(char => ({
+          uuid: char.uuid,
+          isReadable: char.isReadable,
+          isWritable: char.isWritableWithResponse || char.isWritableWithoutResponse,
+          isNotifiable: char.isNotifiable,
+        })),
+      };
     }
-};
 
+    console.log('=== DEVICE DETAILS ===');
+    console.log(JSON.stringify(detailMap, null, 2));
+    console.log('=====================');
 
-// Optional: Function to disconnect
-export const disconnectDevice = async (device) => {
-    if (device) {
-        await device.cancelConnection();
-        console.log("Disconnected successfully.");
+    return detailMap;
+  } catch (error) {
+    console.error('Discovery error:', error);
+    throw error;
+  } finally {
+    if (connectedDevice) {
+      await connectedDevice.cancelConnection();
     }
+  }
 };
 
 export default manager;
