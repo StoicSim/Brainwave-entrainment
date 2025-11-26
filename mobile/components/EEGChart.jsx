@@ -7,12 +7,8 @@ import { BLE_CONFIG } from '../constants/BleConfig';
 
 const { width } = Dimensions.get('window');
 
-/**
- * Real-time EEG Band Power Visualization
- * Using react-native-chart-kit (pure JS, no native modules)
- */
+
 export default function EEGChart({ bandData }) {
-  // Focus on Alpha bands for your use case
   const alphaData = useMemo(() => {
     if (!bandData?.AlphaLow || !bandData?.AlphaHigh) {
       return null;
@@ -21,7 +17,6 @@ export default function EEGChart({ bandData }) {
     const alphaLow = bandData.AlphaLow;
     const alphaHigh = bandData.AlphaHigh;
     
-    // Calculate average alpha power
     const avgAlpha = alphaLow.length > 0 
       ? (alphaLow[alphaLow.length - 1] + alphaHigh[alphaHigh.length - 1]) / 2 
       : 0;
@@ -33,7 +28,6 @@ export default function EEGChart({ bandData }) {
     };
   }, [bandData]);
 
-  // Check if we have any data
   const hasData = useMemo(() => {
     return Object.values(bandData).some(arr => arr.length > 0);
   }, [bandData]);
@@ -47,7 +41,6 @@ export default function EEGChart({ bandData }) {
     );
   }
 
-  // Prepare chart configuration
   const chartConfig = {
     backgroundGradientFrom: '#fff',
     backgroundGradientTo: '#fff',
@@ -61,15 +54,14 @@ export default function EEGChart({ bandData }) {
     },
   };
 
-  // Create chart data for each band
   const createChartData = (band) => {
     const values = bandData[band] || [];
     const data = values.length > 0 ? values : [0];
     
     return {
-      labels: [], // Hide labels for cleaner look
+      labels: [], 
       datasets: [{
-        data: data.slice(-50), // Last 50 points for smooth visualization
+        data: data.slice(-50), 
         color: (opacity = 1) => getBandColor(band, opacity),
         strokeWidth: 2,
       }],

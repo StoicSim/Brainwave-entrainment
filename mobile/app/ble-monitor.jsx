@@ -1,4 +1,3 @@
-// mobile/app/ble-monitor.jsx
 
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
@@ -11,7 +10,6 @@ export default function BleMonitorScreen() {
   const [device, setDevice] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   
-  // EEG data buffers (matching Python implementation)
   const [bandData, setBandData] = useState({
     Delta: [],
     Theta: [],
@@ -26,13 +24,12 @@ export default function BleMonitorScreen() {
   const [metrics, setMetrics] = useState({
     attention: 0,
     meditation: 0,
-    poorSignal: 200, // Start at max (no signal)
+    poorSignal: 200, 
   });
 
   const [rawEEGBuffer, setRawEEGBuffer] = useState([]);
   const dataCountRef = useRef(0);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (device) {
@@ -41,9 +38,6 @@ export default function BleMonitorScreen() {
     };
   }, [device]);
 
-  /**
-   * Handle incoming EEG data packets
-   */
   const handleDataReceived = (parsedData) => {
     dataCountRef.current += 1;
 

@@ -1,5 +1,3 @@
-// mobile/services/BleService.js
-
 import { BleManager } from 'react-native-ble-plx';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { Buffer } from 'buffer';
@@ -8,13 +6,11 @@ import { BLE_CONFIG } from '../constants/BleConfig';
 
 const manager = new BleManager();
 
-/**
- * Request necessary Bluetooth permissions
- */
+
 const requestPermissions = async () => {
   if (Platform.OS === 'android') {
     if (Platform.Version >= 31) {
-      // Android 12+
+      
       const grantedScan = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         {
@@ -48,12 +44,10 @@ const requestPermissions = async () => {
       return grantedLocation === PermissionsAndroid.RESULTS.GRANTED;
     }
   }
-  return true; // iOS handles permissions via Info.plist
+  return true; 
 };
 
-/**
- * Scan for the EMI device
- */
+
 export const scanAndConnect = async (onDeviceFound) => {
   const isPermitted = await requestPermissions();
   if (!isPermitted) {
@@ -63,7 +57,7 @@ export const scanAndConnect = async (onDeviceFound) => {
   console.log('Starting BLE scan...');
   
   manager.startDeviceScan(
-    null, // Scan all devices (filter by MAC/name later)
+    null,
     { allowDuplicates: false },
     (error, device) => {
       if (error) {
@@ -72,7 +66,7 @@ export const scanAndConnect = async (onDeviceFound) => {
         throw error;
       }
 
-      // Match by MAC address or name
+      
       const matchesMac = device.id === BLE_CONFIG.DEVICE_MAC_ADDRESS;
       const matchesName = BLE_CONFIG.DEVICE_NAME_FILTER && 
                           device.name === BLE_CONFIG.DEVICE_NAME_FILTER;
@@ -86,9 +80,7 @@ export const scanAndConnect = async (onDeviceFound) => {
   );
 };
 
-/**
- * Connect to device and start monitoring data
- */
+
 export const connectAndMonitor = async (device, onDataReceived) => {
   try {
     manager.stopDeviceScan();
