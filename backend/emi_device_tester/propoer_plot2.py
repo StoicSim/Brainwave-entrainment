@@ -3,17 +3,15 @@ from bleak import BleakClient
 from datetime import datetime
 from collections import deque
 import matplotlib
-matplotlib.use("QtAgg")  # Must be before pyplot
+matplotlib.use("QtAgg")  
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import threading
 import time
 from scipy.signal import butter, lfilter
 
-# -----------------------------
-# BLE CONFIG
-# -----------------------------
-DEVICE_ADDRESS = "34:81:F4:33:AE:91"  # Replace with your device MAC
+
+DEVICE_ADDRESS = "34:81:F4:33:AE:91"  
 
 NOTIFY_UUIDS = [
    
@@ -32,17 +30,13 @@ CODE_LENGTHS = {
 
 BUFFER = bytearray()
 
-# -----------------------------
-# DATA BUFFERS
-# -----------------------------
+
 MAX_POINTS = 300
 band_buffers = {band: deque(maxlen=MAX_POINTS) for band in
                 ['Delta','Theta','AlphaLow','AlphaHigh','BetaLow','BetaHigh','GammaLow','GammaHigh']}
-raw_buffer = deque(maxlen=1000)  # Raw EEG scrolling window
+raw_buffer = deque(maxlen=1000)  
 
-# -----------------------------
-# THINKGEAR PARSER
-# -----------------------------
+
 def parse_thinkgear_stream(data):
     global BUFFER
     BUFFER.extend(data)
@@ -112,28 +106,23 @@ def parse_thinkgear_stream(data):
     BUFFER = BUFFER[i:]
     return results
 
-# -----------------------------
-# BLE NOTIFY HANDLER
-# -----------------------------
+
 def handle_notify(sender, data):
     packets = parse_thinkgear_stream(data)
     for p in packets:
-        # Update band buffers
+       
         if "EEG_Bands" in p["parsed"]:
             band_dict = p["parsed"]["EEG_Bands"]
             for band, val in band_dict.items():
                 band_buffers[band].append(val)
-            # Console output
             print(f"[{p['timestamp']}] EEG Bands:", band_dict)
 
-        # Update raw EEG buffer
+        
         if "RawEEG" in p["parsed"]:
             raw_buffer.append(p["parsed"]["RawEEG"])
             print(f"[{p['timestamp']}] RawEEG:", p["parsed"]["RawEEG"])
 
-# -----------------------------
-# BAND-PASS FILTER FUNCTIONS
-# -----------------------------
+
 def butter_bandpass(lowcut, highcut, fs, order=4):
     nyq = 0.5 * fs
     low = lowcut / nyq
@@ -145,15 +134,13 @@ def bandpass_filter(data, lowcut, highcut, fs, order=4):
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
     return lfilter(b, a, data)
 
-# -----------------------------
-# PLOT FUNCTION
-# -----------------------------
+
 def start_live_plot():
-    fs = 256  # adjust to your device's sampling rate
+    fs = 256 
     fig, axs = plt.subplots(6, 2, figsize=(14, 12))
     fig.suptitle("Real-Time EEG Data")
 
-    # 8-band power plots
+   
     axes = axs.flat[:8]
     lines = {}
     for ax, band in zip(axes, band_buffers.keys()):
@@ -163,7 +150,7 @@ def start_live_plot():
         line, = ax.plot([], [], lw=1)
         lines[band] = line
 
-    # Filtered EEG plots
+    
     filtered_bands = ['Delta','Theta','Alpha','Beta','Gamma']
     filt_axes = axs.flat[8:]
     filt_lines = {}
@@ -174,15 +161,15 @@ def start_live_plot():
         line, = ax.plot([], [], lw=1)
         filt_lines[band] = line
 
-    # Buffers for filtered EEG
+   
     filt_buffers = {band: deque(maxlen=MAX_POINTS) for band in filtered_bands}
 
     # Animation
     def animate(frame):
-        # Update power lines with index-based x-axis (fix vertical line issue)
+       
         for band, line in lines.items():
             y = list(band_buffers[band])
-            x = list(range(len(y)))  # scroll along x-axis by index
+            x = list(range(len(y)))  
             line.set_data(x, y)
             line.axes.set_xlim(0, MAX_POINTS)
             if y:
@@ -190,7 +177,7 @@ def start_live_plot():
                 max_y = max(y)
                 line.axes.set_ylim(min_y*0.9, max_y*1.1)
 
-        # Update filtered EEG lines
+        
         if len(raw_buffer) > 0:
             raw_data = list(raw_buffer)
             filt_buffers['Delta'].extend(bandpass_filter(raw_data, 0.5, 4, fs)[-len(raw_data):])
@@ -215,9 +202,7 @@ def start_live_plot():
     plt.tight_layout()
     plt.show()
 
-# -----------------------------
-# BLE ASYNC TASK
-# -----------------------------
+
 async def ble_task():
     async with BleakClient(DEVICE_ADDRESS) as client:
         print("Connected to device!")
@@ -230,13 +215,11 @@ async def ble_task():
         while True:
             await asyncio.sleep(1)
 
-# -----------------------------
-# MAIN
-# -----------------------------
+
 if __name__ == "__main__":
-    # Start BLE in background thread
+    
     ble_thread = threading.Thread(target=lambda: asyncio.run(ble_task()), daemon=True)
     ble_thread.start()
 
-    # Start plotting in main thread
+    
     start_live_plot()

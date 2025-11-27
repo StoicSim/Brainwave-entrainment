@@ -1,3 +1,6 @@
+// mobile/services/BleService.js
+// Ported from Python BLE logic
+
 import { BleManager } from 'react-native-ble-plx';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { Buffer } from 'buffer';
@@ -6,16 +9,17 @@ import { BLE_CONFIG } from '../constants/BleConfig';
 
 const manager = new BleManager();
 
-
+/**
+ * Request Bluetooth permissions
+ */
 const requestPermissions = async () => {
   if (Platform.OS === 'android') {
     if (Platform.Version >= 31) {
-      
       const grantedScan = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         {
           title: 'Bluetooth Scan Permission',
-          message: 'This app needs Bluetooth scan permission to find your EEG device',
+          message: 'This app needs Bluetooth scan permission',
           buttonPositive: 'OK',
         }
       );
@@ -23,7 +27,7 @@ const requestPermissions = async () => {
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
         {
           title: 'Bluetooth Connect Permission',
-          message: 'This app needs Bluetooth connect permission to connect to your EEG device',
+          message: 'This app needs Bluetooth connect permission',
           buttonPositive: 'OK',
         }
       );
@@ -32,22 +36,23 @@ const requestPermissions = async () => {
         grantedConnect === PermissionsAndroid.RESULTS.GRANTED
       );
     } else {
-      // Android 11 and below
       const grantedLocation = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
           title: 'Location Permission',
-          message: 'Bluetooth scanning requires location permission on Android',
+          message: 'Bluetooth requires location permission',
           buttonPositive: 'OK',
         }
       );
       return grantedLocation === PermissionsAndroid.RESULTS.GRANTED;
     }
   }
-  return true; 
+  return true;
 };
 
-
+/**
+ * Scan for device
+ */
 export const scanAndConnect = async (onDeviceFound) => {
   const isPermitted = await requestPermissions();
   if (!isPermitted) {
@@ -66,7 +71,6 @@ export const scanAndConnect = async (onDeviceFound) => {
         throw error;
       }
 
-      
       const matchesMac = device.id === BLE_CONFIG.DEVICE_MAC_ADDRESS;
       const matchesName = BLE_CONFIG.DEVICE_NAME_FILTER && 
                           device.name === BLE_CONFIG.DEVICE_NAME_FILTER;
@@ -80,7 +84,9 @@ export const scanAndConnect = async (onDeviceFound) => {
   );
 };
 
-
+/**
+ * Connect and monitor - Matches Python handle_notify logic
+ */
 export const connectAndMonitor = async (device, onDataReceived) => {
   try {
     manager.stopDeviceScan();
@@ -92,10 +98,14 @@ export const connectAndMonitor = async (device, onDataReceived) => {
     await connectedDevice.discoverAllServicesAndCharacteristics();
     console.log('Services discovered. Starting data stream...');
 
-    // Reset decoder state
+    // Reset decoder (Python equivalent: clear BUFFER)
     decoder.reset();
 
-    // Start monitoring the characteristic
+    let packetCount = 0;
+    let validCount = 0;
+    let invalidCount = 0;
+
+    // Monitor characteristic (Python: handle_notify function)
     connectedDevice.monitorCharacteristicForService(
       BLE_CONFIG.DATA_SERVICE_UUID,
       BLE_CONFIG.DATA_CHARACTERISTIC_UUID,
@@ -107,34 +117,51 @@ export const connectAndMonitor = async (device, onDataReceived) => {
 
         if (characteristic?.value) {
           try {
-            // Decode base64 to bytes
+            // Decode base64 to bytes (Python: data parameter)
             const rawBytes = Buffer.from(characteristic.value, 'base64');
             
-            // Log first few bytes for debugging (only first 10 times)
-            if (decoder.packetCount < 10) {
-              console.log('Raw bytes:', Array.from(rawBytes.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
-            }
-            
-            // Parse ThinkGear stream
+            // Parse ThinkGear stream (Python: packets = parse_thinkgear_stream(data))
             const packets = decoder.parseStream(rawBytes);
             
-            // Send each parsed packet to the callback
-            packets.forEach(packet => {
-              if (packet.checksumValid) {
-                onDataReceived(packet.data);
+            // Process each packet (Python: for p in packets)
+            packets.forEach(p => {
+              packetCount++;
+              
+              if (p.checksumValid) {
+                validCount++;
                 
-                // Log successful packet (first 5 only)
-                if (decoder.packetCount <= 5) {
-                  console.log('✓ Valid packet #' + packet.packetNumber + ':', packet.data);
+                // Send to callback (Python: update band_buffers and raw_buffer)
+                onDataReceived(p.parsed);
+                
+                // Log first few packets for debugging
+                if (validCount <= 5) {
+                  console.log(`✓ Packet #${validCount}:`, p.parsed);
+                }
+                
+                // Log band powers when received (Python: print EEG Bands)
+                if (p.parsed.eegBands) {
+                  console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] EEG Bands:`, p.parsed.eegBands);
+                }
+                
+                // Log raw EEG (Python: print RawEEG)
+                if (p.parsed.rawEEG !== undefined && validCount <= 10) {
+                  console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] RawEEG: ${p.parsed.rawEEG}`);
+                }
+                
+              } else {
+                invalidCount++;
+                if (invalidCount <= 5) {
+                  console.warn(`✗ Invalid checksum in packet #${packetCount}`);
                 }
               }
             });
             
-            // Log decoder stats every 50 packets
-            if (decoder.packetCount % 50 === 0 && decoder.packetCount > 0) {
-              const stats = decoder.getStats();
-              console.log('Decoder stats:', stats);
+            // Log stats every 100 packets
+            if (packetCount % 100 === 0 && packetCount > 0) {
+              const successRate = ((validCount / packetCount) * 100).toFixed(1);
+              console.log(`Stats: ${validCount}/${packetCount} valid (${successRate}%), buffer: ${decoder.getBufferSize()} bytes`);
             }
+            
           } catch (err) {
             console.error('Decoding error:', err);
           }
@@ -150,7 +177,7 @@ export const connectAndMonitor = async (device, onDataReceived) => {
 };
 
 /**
- * Disconnect from device
+ * Disconnect device
  */
 export const disconnectDevice = async (device) => {
   if (device) {
@@ -165,7 +192,7 @@ export const disconnectDevice = async (device) => {
 };
 
 /**
- * Debug function: Discover all services and characteristics
+ * Debug: Discover device details
  */
 export const discoverDeviceDetails = async (device) => {
   let connectedDevice = null;

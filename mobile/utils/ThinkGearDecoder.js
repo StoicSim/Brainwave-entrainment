@@ -1,256 +1,157 @@
 // mobile/utils/ThinkGearDecoder.js
-
-import { BLE_CONFIG } from '../constants/BleConfig';
+// Direct port of Python ThinkGear parser logic
 
 /**
- * Complete ThinkGear Protocol Decoder
- * Handles TWO packet formats from your device:
- * 1. Simple: [0xAA 0xAA] [0x04] [0x80 0x02] [raw_eeg_hi] [raw_eeg_lo] [checksum]
- * 2. Full: [0xAA 0xAA] [0x20] [0x02] [signal] [0x83 0x18] [24 bytes bands] [checksum]
+ * ThinkGear Protocol Parser - Ported from Python
+ * Matches the exact logic from your working Python implementation
  */
+
+const SYNC_BYTES = [0xAA, 0xAA];
+const CODE_LENGTHS = {
+  0x02: 1,  // Poor signal
+  0x04: 1,  // Attention
+  0x05: 1,  // Meditation
+  0x80: 2,  // Raw EEG (16-bit signed)
+  0x83: 24, // EEG band powers (8 bands × 3 bytes)
+};
 
 class ThinkGearDecoder {
   constructor() {
     this.buffer = [];
-    this.SYNC_BYTES = BLE_CONFIG.SYNC_BYTES;
-    this.packetCount = 0;
-    this.errorCount = 0;
-    this.lastBandPowers = null; // Cache last band powers
   }
 
   /**
-   * Parse incoming byte stream and extract complete packets
+   * Parse ThinkGear stream - Direct Python port
+   * @param {Uint8Array|Array} data - Raw bytes from BLE
+   * @returns {Array} Array of parsed packets
    */
   parseStream(data) {
+    // Extend buffer with new data (Python: BUFFER.extend(data))
     this.buffer.push(...Array.from(data));
     
-    const results = [];
     let i = 0;
+    const results = [];
 
-    while (i < this.buffer.length - 3) {
-      // Look for sync bytes
-      if (this.buffer[i] !== 0xAA || this.buffer[i + 1] !== 0xAA) {
-        i++;
+    // Main parsing loop (Python: while i < len(BUFFER) - 2)
+    while (i < this.buffer.length - 2) {
+      // Look for sync bytes (Python: if BUFFER[i:i+2] != SYNC_BYTES)
+      if (this.buffer[i] !== SYNC_BYTES[0] || this.buffer[i + 1] !== SYNC_BYTES[1]) {
+        i += 1;
         continue;
       }
 
-      // Get payload length
-      const payloadLength = this.buffer[i + 2];
-      
-      // Validate payload length
-      if (payloadLength < 1 || payloadLength > 169) {
-        i += 2;
-        continue;
+      // Check if we have enough data for length byte
+      if (i + 4 > this.buffer.length) {
+        break;
       }
 
-      const packetEnd = i + 3 + payloadLength + 1;
+      // Get payload length (Python: payload_len = BUFFER[i+2])
+      const payloadLen = this.buffer[i + 2];
+      const packetEnd = i + 3 + payloadLen + 1; // sync(2) + len(1) + payload + checksum(1)
 
-      // Wait for complete packet
+      // Wait for complete packet (Python: if packet_end > len(BUFFER))
       if (packetEnd > this.buffer.length) {
         break;
       }
 
-      // Extract packet
+      // Extract packet (Python: packet = BUFFER[i:packet_end])
       const packet = this.buffer.slice(i, packetEnd);
-      const payload = packet.slice(3, -1);
-      const receivedChecksum = packet[packet.length - 1];
+      const payload = packet.slice(3, -1); // Remove sync, length, checksum
+      const checksum = packet[packet.length - 1];
 
-      // Calculate checksum
-      let sum = 0;
-      for (let j = 0; j < payload.length; j++) {
-        sum += payload[j];
-      }
-      const calculatedChecksum = (~sum) & 0xFF;
-      
-      const isValid = calculatedChecksum === receivedChecksum;
+      // Calculate checksum (Python: calc_checksum = 0xFF - (sum(payload) & 0xFF))
+      const sum = payload.reduce((acc, byte) => acc + byte, 0);
+      const calcChecksum = 0xFF - (sum & 0xFF);
+      const validChecksum = (calcChecksum === checksum);
 
-      if (!isValid) {
-        if (this.errorCount < 3) {
-          console.log(
-            `Checksum mismatch at packet #${this.packetCount + 1}: ` +
-            `calc=0x${calculatedChecksum.toString(16)}, recv=0x${receivedChecksum.toString(16)}`
-          );
+      // Parse payload values (Python: j = 0; parsed_values = {})
+      let j = 0;
+      const parsedValues = {};
+
+      while (j < payload.length) {
+        const code = payload[j];
+        j += 1;
+
+        const length = CODE_LENGTHS[code];
+        if (length === undefined) {
+          // Unknown code, skip next byte
+          j += 1;
+          continue;
         }
-        this.errorCount++;
-        i++;
-        continue;
+
+        if (j + length > payload.length) {
+          break;
+        }
+
+        const valBytes = payload.slice(j, j + length);
+        j += length;
+
+        // Decode based on code (Python logic)
+        if (code === 0x02) {
+          parsedValues.poorSignal = valBytes[0];
+        } else if (code === 0x04) {
+          parsedValues.attention = valBytes[0];
+        } else if (code === 0x05) {
+          parsedValues.meditation = valBytes[0];
+        } else if (code === 0x80) {
+          // Raw EEG: 16-bit signed big-endian
+          // Python: int.from_bytes(val_bytes, 'big', signed=True)
+          const value = (valBytes[0] << 8) | valBytes[1];
+          parsedValues.rawEEG = value > 32767 ? value - 65536 : value;
+        } else if (code === 0x83) {
+          // EEG Band Powers: 8 bands × 3 bytes each
+          // Python: bands = ['Delta','Theta','AlphaLow',...]
+          const bands = ['Delta', 'Theta', 'AlphaLow', 'AlphaHigh', 
+                         'BetaLow', 'BetaHigh', 'GammaLow', 'GammaHigh'];
+          const powers = {};
+          
+          for (let k = 0; k < bands.length; k++) {
+            const start = k * 3;
+            // Python: int.from_bytes(val_bytes[start:start+3], 'big')
+            const bandValue = (valBytes[start] << 16) | 
+                             (valBytes[start + 1] << 8) | 
+                             valBytes[start + 2];
+            powers[bands[k]] = bandValue;
+          }
+          parsedValues.eegBands = powers;
+        }
       }
 
-      // Valid packet!
-      this.errorCount = 0;
-      this.packetCount++;
+      // Create result object (Python: timestamp = datetime.now().strftime(...))
+      const timestamp = new Date().toISOString();
+      results.push({
+        timestamp: timestamp,
+        parsed: parsedValues,
+        checksumValid: validChecksum,
+      });
 
-      // Parse payload
-      const parsedData = this.parsePayload(payload);
-      
-      // Only return packets with data
-      if (Object.keys(parsedData).length > 0) {
-        results.push({
-          timestamp: new Date().toISOString(),
-          data: parsedData,
-          checksumValid: true,
-          packetNumber: this.packetCount,
-        });
-      }
-
+      // Move to next packet (Python: i = packet_end)
       i = packetEnd;
     }
 
-    // Clean buffer
+    // Remove processed bytes (Python: BUFFER = BUFFER[i:])
     this.buffer = this.buffer.slice(i);
-    
-    if (this.buffer.length > 1000) {
-      console.warn('Buffer overflow, clearing');
-      this.buffer = this.buffer.slice(-500);
-    }
 
     return results;
   }
 
   /**
-   * Parse payload into meaningful data
-   */
-  parsePayload(payload) {
-    const parsed = {};
-    let j = 0;
-
-    while (j < payload.length) {
-      const code = payload[j];
-      j++;
-
-      // Skip extended code prefix
-      if (code === 0x55) {
-        continue;
-      }
-
-      switch (code) {
-        case 0x02: // Poor Signal Quality
-          if (j < payload.length) {
-            parsed.poorSignal = payload[j];
-            j++;
-          }
-          break;
-
-        case 0x04: // Attention eSense
-          if (j < payload.length) {
-            parsed.attention = payload[j];
-            j++;
-          }
-          break;
-
-        case 0x05: // Meditation eSense
-          if (j < payload.length) {
-            parsed.meditation = payload[j];
-            j++;
-          }
-          break;
-
-        case 0x80: // Raw EEG (2 bytes)
-          if (j + 1 < payload.length) {
-            // Skip the length byte (0x02)
-            if (payload[j] === 0x02) {
-              j++;
-            }
-            // Read 2-byte signed integer
-            if (j + 1 < payload.length) {
-              const hi = payload[j];
-              const lo = payload[j + 1];
-              const value = (hi << 8) | lo;
-              parsed.rawEEG = value > 32767 ? value - 65536 : value;
-              j += 2;
-            }
-          }
-          break;
-
-        case 0x83: // EEG Power Bands (24 bytes)
-          // Next byte should be length (0x18 = 24)
-          if (j < payload.length) {
-            const bandLength = payload[j];
-            j++;
-            
-            if (bandLength === 24 && j + 24 <= payload.length) {
-              const bandBytes = payload.slice(j, j + 24);
-              parsed.eegBands = this.parseEEGBands(bandBytes);
-              
-              // Cache for future packets
-              this.lastBandPowers = parsed.eegBands;
-              
-              j += 24;
-            } else {
-              console.warn(`Unexpected EEG band length: ${bandLength}`);
-              j += Math.min(bandLength, payload.length - j);
-            }
-          }
-          break;
-
-        default:
-          // Unknown code - try to skip gracefully
-          if (j < payload.length) {
-            const possibleLength = payload[j];
-            if (possibleLength < 170 && j + possibleLength < payload.length) {
-              j += possibleLength + 1;
-            } else {
-              j++;
-            }
-          }
-          break;
-      }
-    }
-
-    return parsed;
-  }
-
-  /**
-   * Parse 24-byte EEG band powers
-   */
-  parseEEGBands(bytes) {
-    if (bytes.length < 24) {
-      console.warn(`Incomplete EEG band data: ${bytes.length} bytes`);
-      return null;
-    }
-
-    const bands = BLE_CONFIG.EEG_BANDS;
-    const powers = {};
-
-    for (let i = 0; i < 8; i++) {
-      const offset = i * 3;
-      // 3-byte big-endian unsigned integer
-      const value = (bytes[offset] << 16) | (bytes[offset + 1] << 8) | bytes[offset + 2];
-      powers[bands[i]] = value;
-    }
-
-    return powers;
-  }
-
-  /**
-   * Get decoder statistics
-   */
-  getStats() {
-    return {
-      packetCount: this.packetCount,
-      errorCount: this.errorCount,
-      bufferSize: this.buffer.length,
-      successRate: this.packetCount > 0 
-        ? ((this.packetCount / (this.packetCount + this.errorCount)) * 100).toFixed(1) + '%'
-        : '0%',
-      hasBandPowers: this.lastBandPowers !== null
-    };
-  }
-
-  /**
-   * Reset decoder state
+   * Reset buffer
    */
   reset() {
     this.buffer = [];
-    this.packetCount = 0;
-    this.errorCount = 0;
-    this.lastBandPowers = null;
-    console.log('ThinkGear decoder reset');
+  }
+
+  /**
+   * Get buffer size for debugging
+   */
+  getBufferSize() {
+    return this.buffer.length;
   }
 }
 
 // Export singleton instance
 export const decoder = new ThinkGearDecoder();
 
-// Export class for testing
+// Export class
 export default ThinkGearDecoder;

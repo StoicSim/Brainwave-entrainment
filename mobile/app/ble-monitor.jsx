@@ -1,3 +1,5 @@
+// mobile/app/ble-monitor.jsx
+// Data handling logic ported from Python
 
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
@@ -10,6 +12,8 @@ export default function BleMonitorScreen() {
   const [device, setDevice] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   
+  // Data buffers matching Python implementation
+  // Python: band_buffers = {band: deque(maxlen=MAX_POINTS) for band in [...]}
   const [bandData, setBandData] = useState({
     Delta: [],
     Theta: [],
@@ -21,15 +25,20 @@ export default function BleMonitorScreen() {
     GammaHigh: [],
   });
   
+  // Python: raw_buffer = deque(maxlen=1000)
+  const [rawEEGBuffer, setRawEEGBuffer] = useState([]);
+  
+  // Metrics from eSense values
   const [metrics, setMetrics] = useState({
     attention: 0,
     meditation: 0,
-    poorSignal: 200, 
+    poorSignal: 200,
   });
 
-  const [rawEEGBuffer, setRawEEGBuffer] = useState([]);
   const dataCountRef = useRef(0);
+  const lastUpdateRef = useRef(Date.now());
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (device) {
@@ -38,21 +47,38 @@ export default function BleMonitorScreen() {
     };
   }, [device]);
 
+  /**
+   * Handle incoming data - Matches Python handle_notify logic
+   */
   const handleDataReceived = (parsedData) => {
     dataCountRef.current += 1;
+    const now = Date.now();
 
-    // Update EEG band powers
+    // Update EEG band buffers when received
+    // Python: if "EEG_Bands" in p["parsed"]: band_buffers[band].append(val)
     if (parsedData.eegBands) {
       setBandData(prev => {
         const updated = { ...prev };
         Object.entries(parsedData.eegBands).forEach(([band, value]) => {
-          updated[band] = [...prev[band], value].slice(-BLE_CONFIG.MAX_POINTS);
+          // Maintain MAX_POINTS items (Python: deque(maxlen=MAX_POINTS))
+          const newData = [...prev[band], value];
+          updated[band] = newData.slice(-BLE_CONFIG.MAX_POINTS);
         });
         return updated;
       });
     }
 
+    // Update raw EEG buffer
+    // Python: if "RawEEG" in p["parsed"]: raw_buffer.append(...)
+    if (parsedData.rawEEG !== undefined) {
+      setRawEEGBuffer(prev => {
+        const newBuffer = [...prev, parsedData.rawEEG];
+        return newBuffer.slice(-1000); // maxlen=1000
+      });
+    }
+
     // Update eSense metrics
+    // Python: Attention, Meditation, PoorSignal
     if (parsedData.attention !== undefined || 
         parsedData.meditation !== undefined || 
         parsedData.poorSignal !== undefined) {
@@ -63,14 +89,15 @@ export default function BleMonitorScreen() {
       }));
     }
 
-    // Update raw EEG buffer (for future filtering/analysis)
-    if (parsedData.rawEEG !== undefined) {
-      setRawEEGBuffer(prev => [...prev, parsedData.rawEEG].slice(-1000));
+    // Throttle UI updates to avoid overwhelming React
+    // Update at most every 50ms (20 FPS)
+    if (now - lastUpdateRef.current > 50) {
+      lastUpdateRef.current = now;
     }
   };
 
   /**
-   * Scan and connect to device
+   * Connect to device
    */
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -106,7 +133,7 @@ export default function BleMonitorScreen() {
       setDevice(null);
       setStatus('Disconnected');
       
-      // Reset data
+      // Reset all data
       setBandData({
         Delta: [],
         Theta: [],
@@ -117,8 +144,8 @@ export default function BleMonitorScreen() {
         GammaLow: [],
         GammaHigh: [],
       });
-      setMetrics({ attention: 0, meditation: 0, poorSignal: 200 });
       setRawEEGBuffer([]);
+      setMetrics({ attention: 0, meditation: 0, poorSignal: 200 });
       dataCountRef.current = 0;
     }
   };
@@ -132,6 +159,11 @@ export default function BleMonitorScreen() {
     if (status.includes('Failed')) return '#F44336';
     return '#999';
   };
+
+  /**
+   * Check if we have any band data
+   */
+  const hasBandData = Object.values(bandData).some(arr => arr.length > 0);
 
   return (
     <View style={styles.container}>
@@ -151,7 +183,7 @@ export default function BleMonitorScreen() {
           disabled={isConnecting || device !== null}
         >
           <Text style={styles.buttonText}>
-            {device ? 'Connected' : 'Connect to Device'}
+            {device ? '✓ Connected' : 'Connect to Device'}
           </Text>
         </TouchableOpacity>
 
@@ -164,7 +196,7 @@ export default function BleMonitorScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Metrics */}
+      {/* Metrics Display */}
       {device && (
         <View style={styles.metricsContainer}>
           <View style={styles.metricCard}>
@@ -173,7 +205,7 @@ export default function BleMonitorScreen() {
               styles.metricValue,
               { color: metrics.poorSignal < 50 ? '#4CAF50' : '#F44336' }
             ]}>
-              {metrics.poorSignal < 50 ? 'Good' : 'Poor'}
+              {metrics.poorSignal < 50 ? 'Good' : metrics.poorSignal < 100 ? 'Fair' : 'Poor'}
             </Text>
             <Text style={styles.metricSubtext}>({metrics.poorSignal}/200)</Text>
           </View>
@@ -181,26 +213,44 @@ export default function BleMonitorScreen() {
           <View style={styles.metricCard}>
             <Text style={styles.metricLabel}>Attention</Text>
             <Text style={styles.metricValue}>{metrics.attention}</Text>
-            <Text style={styles.metricSubtext}>0-100</Text>
+            <Text style={styles.metricSubtext}>eSense</Text>
           </View>
 
           <View style={styles.metricCard}>
             <Text style={styles.metricLabel}>Meditation</Text>
             <Text style={styles.metricValue}>{metrics.meditation}</Text>
-            <Text style={styles.metricSubtext}>0-100</Text>
+            <Text style={styles.metricSubtext}>eSense</Text>
           </View>
 
           <View style={styles.metricCard}>
             <Text style={styles.metricLabel}>Data Points</Text>
             <Text style={styles.metricValue}>{dataCountRef.current}</Text>
-            <Text style={styles.metricSubtext}>received</Text>
+            <Text style={styles.metricSubtext}>
+              {hasBandData ? '✓ Bands' : 'Raw only'}
+            </Text>
           </View>
         </View>
       )}
 
       {/* Charts */}
       <ScrollView style={styles.chartContainer} showsVerticalScrollIndicator={false}>
-        <EEGChart bandData={bandData} />
+        {device && hasBandData ? (
+          <EEGChart bandData={bandData} rawBuffer={rawEEGBuffer} />
+        ) : device ? (
+          <View style={styles.waitingContainer}>
+            <Text style={styles.waitingText}>📡 Receiving data...</Text>
+            <Text style={styles.waitingSubtext}>
+              Waiting for EEG band powers (arrives every ~1 second)
+            </Text>
+            <Text style={styles.waitingSubtext}>
+              Raw EEG samples: {rawEEGBuffer.length}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.waitingContainer}>
+            <Text style={styles.waitingText}>👆 Connect to your device to start</Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -298,5 +348,24 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     flex: 1,
+  },
+  waitingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    minHeight: 300,
+  },
+  waitingText: {
+    fontSize: 18,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  waitingSubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 5,
   },
 });
