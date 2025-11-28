@@ -1,5 +1,3 @@
-// mobile/app/ble-monitor.jsx
-// Data handling logic ported from Python
 
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
@@ -12,8 +10,6 @@ export default function BleMonitorScreen() {
   const [device, setDevice] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   
-  // Data buffers matching Python implementation
-  // Python: band_buffers = {band: deque(maxlen=MAX_POINTS) for band in [...]}
   const [bandData, setBandData] = useState({
     Delta: [],
     Theta: [],
@@ -77,17 +73,13 @@ export default function BleMonitorScreen() {
       });
     }
 
-    // Update eSense metrics
+    // Update eSense metrics - default to 0 if not provided
     // Python: Attention, Meditation, PoorSignal
-    if (parsedData.attention !== undefined || 
-        parsedData.meditation !== undefined || 
-        parsedData.poorSignal !== undefined) {
-      setMetrics(prev => ({
-        attention: parsedData.attention ?? prev.attention,
-        meditation: parsedData.meditation ?? prev.meditation,
-        poorSignal: parsedData.poorSignal ?? prev.poorSignal,
-      }));
-    }
+    setMetrics(prev => ({
+      attention: parsedData.attention !== undefined ? parsedData.attention : (parsedData.poorSignal !== undefined ? 0 : prev.attention),
+      meditation: parsedData.meditation !== undefined ? parsedData.meditation : (parsedData.poorSignal !== undefined ? 0 : prev.meditation),
+      poorSignal: parsedData.poorSignal !== undefined ? parsedData.poorSignal : prev.poorSignal,
+    }));
 
     // Throttle UI updates to avoid overwhelming React
     // Update at most every 50ms (20 FPS)
@@ -96,9 +88,7 @@ export default function BleMonitorScreen() {
     }
   };
 
-  /**
-   * Connect to device
-   */
+  
   const handleConnect = async () => {
     setIsConnecting(true);
     setStatus('Scanning...');
@@ -124,9 +114,7 @@ export default function BleMonitorScreen() {
     }
   };
 
-  /**
-   * Disconnect from device
-   */
+  
   const handleDisconnect = async () => {
     if (device) {
       await disconnectDevice(device);
@@ -150,9 +138,7 @@ export default function BleMonitorScreen() {
     }
   };
 
-  /**
-   * Get status color
-   */
+  
   const getStatusColor = () => {
     if (status.includes('Streaming')) return '#4CAF50';
     if (status.includes('Connecting') || status.includes('Scanning')) return '#FF9800';
@@ -160,9 +146,7 @@ export default function BleMonitorScreen() {
     return '#999';
   };
 
-  /**
-   * Check if we have any band data
-   */
+  
   const hasBandData = Object.values(bandData).some(arr => arr.length > 0);
 
   return (
@@ -196,67 +180,128 @@ export default function BleMonitorScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Metrics Display */}
       {device && (
-        <View style={styles.metricsContainer}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Signal Quality</Text>
-            <Text style={[
-              styles.metricValue,
-              { color: metrics.poorSignal < 50 ? '#4CAF50' : '#F44336' }
-            ]}>
-              {metrics.poorSignal < 50 ? 'Good' : metrics.poorSignal < 100 ? 'Fair' : 'Poor'}
-            </Text>
-            <Text style={styles.metricSubtext}>({metrics.poorSignal}/200)</Text>
-          </View>
+        <>
+          {metrics.poorSignal > 50 && (
+            <View style={styles.warningBanner}>
+              <Text style={styles.warningIcon}>⚠️</Text>
+              <View style={styles.warningTextContainer}>
+                <Text style={styles.warningTitle}>Poor Signal Quality</Text>
+                <Text style={styles.warningText}>
+                  {metrics.poorSignal === 200 
+                    ? 'No sensor contact - Adjust headset placement'
+                    : 'Weak signal - Ensure sensors touch skin firmly'}
+                </Text>
+              </View>
+            </View>
+          )}
+          
+          <View style={styles.metricsContainer}>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricLabel}>Signal Quality</Text>
+              <Text style={[
+                styles.metricValue,
+                { color: metrics.poorSignal < 50 ? '#4CAF50' : '#F44336' }
+              ]}>
+                {metrics.poorSignal < 50 ? 'Good' : metrics.poorSignal < 100 ? 'Fair' : 'Poor'}
+              </Text>
+              <Text style={styles.metricSubtext}>({metrics.poorSignal}/200)</Text>
+            </View>
 
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Attention</Text>
-            <Text style={styles.metricValue}>{metrics.attention}</Text>
-            <Text style={styles.metricSubtext}>eSense</Text>
-          </View>
+            <View style={[styles.metricCard, metrics.poorSignal > 50 && styles.metricCardDisabled]}>
+              <Text style={styles.metricLabel}>Attention</Text>
+              <Text style={[styles.metricValue, metrics.poorSignal > 50 && styles.metricDisabled]}>
+                {metrics.attention}
+              </Text>
+              <Text style={styles.metricSubtext}>
+                {metrics.poorSignal > 50 ? 'Need good signal' : 'eSense'}
+              </Text>
+            </View>
 
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Meditation</Text>
-            <Text style={styles.metricValue}>{metrics.meditation}</Text>
-            <Text style={styles.metricSubtext}>eSense</Text>
-          </View>
+            <View style={[styles.metricCard, metrics.poorSignal > 50 && styles.metricCardDisabled]}>
+              <Text style={styles.metricLabel}>Meditation</Text>
+              <Text style={[styles.metricValue, metrics.poorSignal > 50 && styles.metricDisabled]}>
+                {metrics.meditation}
+              </Text>
+              <Text style={styles.metricSubtext}>
+                {metrics.poorSignal > 50 ? 'Need good signal' : 'eSense'}
+              </Text>
+            </View>
 
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Data Points</Text>
-            <Text style={styles.metricValue}>{dataCountRef.current}</Text>
-            <Text style={styles.metricSubtext}>
-              {hasBandData ? '✓ Bands' : 'Raw only'}
-            </Text>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricLabel}>Data Points</Text>
+              <Text style={styles.metricValue}>{dataCountRef.current}</Text>
+              <Text style={styles.metricSubtext}>
+                {hasBandData ? '✓ Bands' : 'Raw only'}
+              </Text>
+            </View>
           </View>
-        </View>
+        </>
       )}
 
       {/* Charts */}
-      <ScrollView style={styles.chartContainer} showsVerticalScrollIndicator={false}>
-        {device && hasBandData ? (
-          <EEGChart bandData={bandData} rawBuffer={rawEEGBuffer} />
-        ) : device ? (
-          <View style={styles.waitingContainer}>
-            <Text style={styles.waitingText}>📡 Receiving data...</Text>
-            <Text style={styles.waitingSubtext}>
-              Waiting for EEG band powers (arrives every ~1 second)
-            </Text>
-            <Text style={styles.waitingSubtext}>
-              Raw EEG samples: {rawEEGBuffer.length}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.waitingContainer}>
-            <Text style={styles.waitingText}>👆 Connect to your device to start</Text>
-          </View>
-        )}
-      </ScrollView>
+     <ScrollView style={styles.chartContainer} showsVerticalScrollIndicator={false}>
+  {device ? (
+    <>
+      {/* Debug info */}
+      <View style={styles.debugContainer}>
+        <Text style={styles.debugText}>
+          Delta: {bandData.Delta?.length || 0} | 
+          Theta: {bandData.Theta?.length || 0} | 
+          Alpha: {bandData.AlphaLow?.length || 0}
+        </Text>
+        <Text style={styles.debugText}>
+          Raw: {rawEEGBuffer.length} samples | Packets: {dataCountRef.current}
+        </Text>
+      </View>
+
+      {/* Render chart when we have enough data */}
+      {(hasBandData && bandData.Delta?.length >= 3) || rawEEGBuffer.length >= 10 ? (
+        <EEGChart 
+          bandData={bandData} 
+          rawBuffer={rawEEGBuffer}
+        />
+      ) : (
+        <View style={styles.waitingContainer}>
+          <Text style={styles.waitingText}>📡 Receiving data...</Text>
+          <Text style={styles.waitingSubtext}>
+            Band data: {bandData.Delta?.length || 0}/3 points
+          </Text>
+          <Text style={styles.waitingSubtext}>
+            Raw samples: {rawEEGBuffer.length}/10
+          </Text>
+          <Text style={styles.waitingSubtext}>
+            Packets: {dataCountRef.current}
+          </Text>
+        </View>
+      )}
+    </>
+  ) : (
+    <View style={styles.waitingContainer}>
+      <Text style={styles.waitingText}> Connect to your device to start</Text>
+    </View>
+  )}
+</ScrollView>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  debugContainer: {
+    backgroundColor: '#FFF9C4',
+    padding: 10,
+    margin: 15,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#FBC02D',
+  },
+  debugText: {
+    fontSize: 11,
+    color: '#F57F17',
+    fontFamily: 'monospace',
+  },
+
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -367,5 +412,39 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     marginTop: 5,
+  },
+  warningBanner: {
+    backgroundColor: '#FFF3E0',
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9800',
+    padding: 15,
+    marginHorizontal: 15,
+    marginBottom: 10,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  warningIcon: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  warningTextContainer: {
+    flex: 1,
+  },
+  warningTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#E65100',
+    marginBottom: 3,
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#EF6C00',
+  },
+  metricCardDisabled: {
+    opacity: 0.5,
+  },
+  metricDisabled: {
+    color: '#999',
   },
 });

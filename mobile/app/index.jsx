@@ -14,7 +14,7 @@ export default function HomeScreen() {
         <Text style={styles.subtitle}>Alpha Wave Focus & Relaxation</Text>
         
         <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>🧠 What is this?</Text>
+          <Text style={styles.infoTitle}> What is this?</Text>
           <Text style={styles.infoText}>
             This app connects to your EMI EEG device to monitor your brainwaves in real-time. 
             Our focus is on Alpha waves, which are associated with relaxation and calm focus.

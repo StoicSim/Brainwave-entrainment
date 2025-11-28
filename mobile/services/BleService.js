@@ -1,5 +1,4 @@
-// mobile/services/BleService.js
-// Ported from Python BLE logic
+
 
 import { BleManager } from 'react-native-ble-plx';
 import { PermissionsAndroid, Platform } from 'react-native';
@@ -9,9 +8,7 @@ import { BLE_CONFIG } from '../constants/BleConfig';
 
 const manager = new BleManager();
 
-/**
- * Request Bluetooth permissions
- */
+
 const requestPermissions = async () => {
   if (Platform.OS === 'android') {
     if (Platform.Version >= 31) {
@@ -141,6 +138,15 @@ export const connectAndMonitor = async (device, onDataReceived) => {
                 // Log band powers when received (Python: print EEG Bands)
                 if (p.parsed.eegBands) {
                   console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] EEG Bands:`, p.parsed.eegBands);
+                }
+                
+                // Log signal quality and eSense values
+                if (p.parsed.poorSignal !== undefined) {
+                  console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] Signal Quality: ${p.parsed.poorSignal}/200 (${p.parsed.poorSignal < 50 ? 'GOOD' : 'POOR'})`);
+                }
+                
+                if (p.parsed.attention !== undefined || p.parsed.meditation !== undefined) {
+                  console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] Attention: ${p.parsed.attention || 'N/A'}, Meditation: ${p.parsed.meditation || 'N/A'}`);
                 }
                 
                 // Log raw EEG (Python: print RawEEG)

@@ -1,43 +1,81 @@
-// mobile/components/EEGChart.jsx
-// Ultra simple - just display values, no charts to avoid crashes
 
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
+import { LineChart } from 'react-native-chart-kit';
 
 const { width } = Dimensions.get('window');
+const CHART_WIDTH = width - 40;
 
 export default function EEGChart({ bandData, rawBuffer }) {
-  // Safety check
-  if (!bandData) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No data</Text>
-      </View>
-    );
-  }
+  const [selectedBand, setSelectedBand] = useState('AlphaLow');
+  const [showRaw, setShowRaw] = useState(false);
 
-  // Check if we have any data
-  const hasData = Object.values(bandData).some(arr => arr && arr.length > 0);
+  // Throttle re-renders - only update every 500ms max
+  const [lastRenderTime, setLastRenderTime] = useState(Date.now());
+  const shouldRender = Date.now() - lastRenderTime > 500;
 
-  if (!hasData) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>⏳ Waiting for EEG data...</Text>
-        <Text style={styles.emptySubtext}>
-          Raw samples: {rawBuffer?.length || 0}
-        </Text>
-      </View>
-    );
-  }
+  // Use effect to control render throttling
+  useEffect(() => {
+    if (!shouldRender) return;
+    
+    const timer = setTimeout(() => {
+      setLastRenderTime(Date.now());
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [bandData, rawBuffer]);
 
-  // Calculate Alpha stats
-  const alphaLowVal = bandData.AlphaLow?.[bandData.AlphaLow.length - 1] || 0;
-  const alphaHighVal = bandData.AlphaHigh?.[bandData.AlphaHigh.length - 1] || 0;
-  const avgAlpha = (alphaLowVal + alphaHighVal) / 2;
+  // Catch any render errors
+  try {
+    // Use props directly - no batching needed, already handled in parent
+    const displayData = {
+      bands: bandData || {},
+      raw: rawBuffer || [],
+    };
+
+    // Safety check
+    if (!displayData.bands) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No data (bands is null)</Text>
+        </View>
+      );
+    }
+
+    const hasData = Object.values(displayData.bands).some(arr => arr && arr.length > 0);
+
+    if (!hasData) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>⏳ Waiting for EEG data...</Text>
+          <Text style={styles.emptySubtext}>
+            Raw samples: {displayData.raw?.length || 0}
+          </Text>
+        </View>
+      );
+    }
+
+    // Calculate Alpha stats
+    const alphaLowVal = displayData.bands.AlphaLow?.[displayData.bands.AlphaLow.length - 1] || 0;
+    const alphaHighVal = displayData.bands.AlphaHigh?.[displayData.bands.AlphaHigh.length - 1] || 0;
+    const avgAlpha = (alphaLowVal + alphaHighVal) / 2;
+
+  // Bands configuration
+  const bands = [
+    { key: 'Delta', color: '#9C27B0', freq: '0.5-4 Hz' },
+    { key: 'Theta', color: '#3F51B5', freq: '4-8 Hz' },
+    { key: 'AlphaLow', color: '#4CAF50', freq: '8-10 Hz', highlight: true },
+    { key: 'AlphaHigh', color: '#8BC34A', freq: '10-13 Hz', highlight: true },
+    { key: 'BetaLow', color: '#FF9800', freq: '13-17 Hz' },
+    { key: 'BetaHigh', color: '#FF5722', freq: '17-30 Hz' },
+    { key: 'GammaLow', color: '#F44336', freq: '30-40 Hz' },
+    { key: 'GammaHigh', color: '#E91E63', freq: '40-50 Hz' },
+  ];
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Alpha Focus */}
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Alpha Focus Card */}
       <View style={styles.alphaContainer}>
         <Text style={styles.alphaTitle}>🧠 Alpha Wave Power</Text>
         <Text style={styles.alphaValue}>
@@ -51,36 +89,116 @@ export default function EEGChart({ bandData, rawBuffer }) {
             High: {formatNumber(alphaHighVal)}
           </Text>
         </View>
+        <Text style={styles.alphaDescription}>
+          {avgAlpha > 50000 ? '✨ High focus & relaxation' :
+           avgAlpha > 20000 ? '👍 Moderate alpha activity' :
+           '💭 Building up...'}
+        </Text>
       </View>
 
-      {/* All Band Values */}
+      {/* Band Spectrum Visualization */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📊 EEG Band Powers</Text>
+        <Text style={styles.sectionTitle}>📊 EEG Band Spectrum</Text>
+        <BandSpectrum bandData={displayData.bands} bands={bands} />
+      </View>
+
+      {/* Individual Band Time Series */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>📈 Band Time Series</Text>
         
-        {['Delta', 'Theta', 'AlphaLow', 'AlphaHigh', 'BetaLow', 'BetaHigh', 'GammaLow', 'GammaHigh'].map((band) => {
-          const values = bandData[band];
+        {/* Band Selector */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.bandSelector}
+        >
+          {bands.map((band) => (
+            <TouchableOpacity
+              key={band.key}
+              style={[
+                styles.bandButton,
+                selectedBand === band.key && styles.bandButtonActive,
+                { borderColor: band.color }
+              ]}
+              onPress={() => setSelectedBand(band.key)}
+            >
+              <Text style={[
+                styles.bandButtonText,
+                selectedBand === band.key && styles.bandButtonTextActive
+              ]}>
+                {band.key}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Selected Band Chart */}
+        <BandTimeSeriesChart 
+          data={displayData.bands[selectedBand] || []}
+          color={bands.find(b => b.key === selectedBand)?.color || '#666'}
+          label={selectedBand}
+        />
+      </View>
+
+      {/* Raw EEG Toggle */}
+      <TouchableOpacity 
+        style={styles.rawToggle}
+        onPress={() => setShowRaw(!showRaw)}
+      >
+        <Text style={styles.rawToggleText}>
+          {showRaw ? '📉 Hide' : '📡 Show'} Raw EEG Signal
+        </Text>
+      </TouchableOpacity>
+
+      {/* Raw EEG Visualization */}
+      {showRaw && displayData.raw && displayData.raw.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📡 Raw EEG (512 Hz)</Text>
+          <RawEEGChart data={displayData.raw} />
+          <View style={styles.rawStats}>
+            <Text style={styles.rawStatsText}>
+              Samples: {displayData.raw.length} | Latest: {displayData.raw[displayData.raw.length - 1]}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* All Band Values Table */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>📋 Current Values</Text>
+        
+        {bands.map((band) => {
+          const values = displayData.bands[band.key];
           if (!values || values.length === 0) return null;
 
           const currentValue = values[values.length - 1];
-          const isAlpha = band.includes('Alpha');
 
           return (
             <View 
-              key={band} 
-              style={[styles.bandRow, isAlpha && styles.alphaBandRow]}
+              key={band.key} 
+              style={[
+                styles.bandRow,
+                band.highlight && styles.alphaBandRow
+              ]}
             >
               <View style={styles.bandInfo}>
-                <Text style={[styles.bandName, isAlpha && styles.alphaBandName]}>
-                  {isAlpha ? '⭐ ' : ''}{band}
-                </Text>
-                <Text style={styles.bandFreq}>{getFrequency(band)}</Text>
+                <View style={styles.bandNameRow}>
+                  <View style={[styles.colorDot, { backgroundColor: band.color }]} />
+                  <Text style={[
+                    styles.bandName,
+                    band.highlight && styles.alphaBandName
+                  ]}>
+                    {band.highlight ? '⭐ ' : ''}{band.key}
+                  </Text>
+                </View>
+                <Text style={styles.bandFreq}>{band.freq}</Text>
               </View>
               <View style={styles.bandValueContainer}>
                 <Text style={styles.bandValue}>
                   {formatNumber(currentValue)}
                 </Text>
                 <Text style={styles.bandSamples}>
-                  {values.length} samples
+                  {values.length} pts
                 </Text>
               </View>
             </View>
@@ -88,47 +206,245 @@ export default function EEGChart({ bandData, rawBuffer }) {
         })}
       </View>
 
-      {/* Raw EEG Info */}
-      {rawBuffer && rawBuffer.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📡 Raw EEG</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Total Samples:</Text>
-            <Text style={styles.infoValue}>{rawBuffer.length}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Latest Value:</Text>
-            <Text style={styles.infoValue}>{rawBuffer[rawBuffer.length - 1]}</Text>
-          </View>
-        </View>
-      )}
-
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          ✨ Data is streaming successfully!
+          ✨ Real-time EEG monitoring active
         </Text>
       </View>
     </ScrollView>
   );
+  } catch (err) {
+    // Catch and display any errors
+    console.error('EEGChart render error:', err);
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>❌ Chart Error</Text>
+        <Text style={styles.emptySubtext}>{err.toString()}</Text>
+        <Text style={styles.emptySubtext}>{err.stack?.substring(0, 200)}</Text>
+      </View>
+    );
+  }
 }
 
+// Band Spectrum Bar Chart Component
+function BandSpectrum({ bandData, bands }) {
+  const values = bands.map(band => {
+    const data = bandData[band.key];
+    return data && data.length > 0 ? data[data.length - 1] : 0;
+  });
+
+  const maxValue = Math.max(...values, 1);
+
+  return (
+    <View style={styles.spectrumContainer}>
+      {bands.map((band, index) => {
+        const value = values[index];
+        const percentage = (value / maxValue) * 100;
+
+        return (
+          <View key={band.key} style={styles.spectrumBar}>
+            <View style={styles.spectrumBarBg}>
+              <View 
+                style={[
+                  styles.spectrumBarFill,
+                  { 
+                    height: `${percentage}%`,
+                    backgroundColor: band.color 
+                  }
+                ]} 
+              />
+            </View>
+            <Text style={styles.spectrumLabel} numberOfLines={1}>
+              {band.key.replace('AlphaLow', 'α↓')
+                       .replace('AlphaHigh', 'α↑')
+                       .replace('BetaLow', 'β↓')
+                       .replace('BetaHigh', 'β↑')
+                       .replace('GammaLow', 'γ↓')
+                       .replace('GammaHigh', 'γ↑')
+                       .substring(0, 5)}
+            </Text>
+            <Text style={styles.spectrumValue}>
+              {formatNumberShort(value)}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// Band Time Series using react-native-chart-kit - Memoized to prevent crashes
+const BandTimeSeriesChart = React.memo(({ data, color, label }) => {
+  // Memoize chart data to prevent unnecessary re-renders
+  const chartData = useMemo(() => {
+    if (!data || data.length < 3) {
+      // Need at least 3 points for chart-kit
+      return null;
+    }
+
+    // Take last 20 points for better performance
+    const displayData = data.slice(-20);
+    
+    return {
+      labels: displayData.map((_, i) => ''), // Empty labels for cleaner look
+      datasets: [{
+        data: displayData.length > 0 ? displayData : [0], // Ensure at least one data point
+        color: (opacity = 1) => color,
+        strokeWidth: 2,
+      }],
+    };
+  }, [data, color]);
+
+  if (!chartData) {
+    return (
+      <View style={styles.timeSeriesEmpty}>
+        <Text style={styles.timeSeriesEmptyText}>
+          Collecting data... ({data?.length || 0}/3 points)
+        </Text>
+      </View>
+    );
+  }
+
+  const minVal = Math.min(...chartData.datasets[0].data);
+  const maxVal = Math.max(...chartData.datasets[0].data);
+  const currentVal = chartData.datasets[0].data[chartData.datasets[0].data.length - 1];
+
+  return (
+    <View style={styles.chartContainer}>
+      <LineChart
+        data={chartData}
+        width={CHART_WIDTH}
+        height={180}
+        chartConfig={{
+          backgroundColor: '#ffffff',
+          backgroundGradientFrom: '#ffffff',
+          backgroundGradientTo: '#f8f8f8',
+          decimalPlaces: 0,
+          color: (opacity = 1) => color,
+          labelColor: (opacity = 1) => '#666',
+          style: {
+            borderRadius: 10,
+          },
+          propsForDots: {
+            r: '3',
+            strokeWidth: '1',
+            stroke: color,
+          },
+          propsForBackgroundLines: {
+            strokeDasharray: '', // solid lines
+            stroke: '#e0e0e0',
+            strokeWidth: 1,
+          },
+        }}
+        bezier // Smooth curves
+        style={styles.chart}
+        withVerticalLabels={false}
+        withHorizontalLabels={true}
+        withInnerLines={true}
+        withOuterLines={false}
+        withVerticalLines={false}
+        segments={4}
+      />
+      <View style={styles.chartInfo}>
+        <Text style={styles.chartLabel}>
+          {label}: {formatNumber(currentVal)}
+        </Text>
+        <Text style={styles.chartRange}>
+          Range: {formatNumber(minVal)} - {formatNumber(maxVal)}
+        </Text>
+      </View>
+    </View>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if data actually changed
+  const prevLength = prevProps.data?.length || 0;
+  const nextLength = nextProps.data?.length || 0;
+  const prevLast = prevProps.data?.[prevLength - 1];
+  const nextLast = nextProps.data?.[nextLength - 1];
+  
+  // Only update if length changed or last value changed
+  return prevLength === nextLength && prevLast === nextLast && prevProps.color === nextProps.color;
+});
+
+// Raw EEG Chart
+function RawEEGChart({ data }) {
+  const chartData = useMemo(() => {
+    if (!data || data.length < 10) {
+      // Need at least 10 points for raw EEG visualization
+      return null;
+    }
+
+    // Take last 50 samples for raw EEG
+    const displayData = data.slice(-50);
+    
+    return {
+      labels: displayData.map((_, i) => ''),
+      datasets: [{
+        data: displayData,
+        color: (opacity = 1) => '#2196F3',
+        strokeWidth: 1.5,
+      }],
+    };
+  }, [data]);
+
+  if (!chartData) {
+    return (
+      <View style={styles.timeSeriesEmpty}>
+        <Text style={styles.timeSeriesEmptyText}>
+          Collecting samples... ({data?.length || 0}/10)
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.chartContainer}>
+      <LineChart
+        data={chartData}
+        width={CHART_WIDTH}
+        height={150}
+        chartConfig={{
+          backgroundColor: '#ffffff',
+          backgroundGradientFrom: '#ffffff',
+          backgroundGradientTo: '#f0f8ff',
+          decimalPlaces: 0,
+          color: (opacity = 1) => '#2196F3',
+          labelColor: (opacity = 1) => '#666',
+          style: {
+            borderRadius: 10,
+          },
+          propsForDots: {
+            r: '0', // No dots for raw signal
+          },
+          propsForBackgroundLines: {
+            stroke: '#e3f2fd',
+            strokeWidth: 1,
+          },
+        }}
+        bezier={false} // Sharp lines for raw EEG
+        style={styles.chart}
+        withVerticalLabels={false}
+        withHorizontalLabels={false}
+        withInnerLines={true}
+        withOuterLines={false}
+        withVerticalLines={false}
+        segments={2}
+      />
+    </View>
+  );
+}
+
+// Helper functions
 function formatNumber(num) {
   if (num === null || num === undefined || isNaN(num)) return '0';
   return Math.round(num).toLocaleString();
 }
 
-function getFrequency(band) {
-  const freqs = {
-    Delta: '0.5-4 Hz',
-    Theta: '4-8 Hz',
-    AlphaLow: '8-10 Hz',
-    AlphaHigh: '10-13 Hz',
-    BetaLow: '13-17 Hz',
-    BetaHigh: '17-30 Hz',
-    GammaLow: '30-40 Hz',
-    GammaHigh: '40-50 Hz',
-  };
-  return freqs[band] || '';
+function formatNumberShort(num) {
+  if (num === null || num === undefined || isNaN(num)) return '0';
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return Math.round(num).toString();
 }
 
 const styles = StyleSheet.create({
@@ -183,10 +499,132 @@ const styles = StyleSheet.create({
   alphaDetails: {
     flexDirection: 'row',
     gap: 20,
+    marginBottom: 10,
   },
   alphaDetailText: {
     fontSize: 14,
     color: '#558B2F',
+  },
+  alphaDescription: {
+    fontSize: 14,
+    color: '#558B2F',
+    fontStyle: 'italic',
+  },
+  spectrumContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    height: 200,
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  spectrumBar: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  spectrumBarBg: {
+    width: '100%',
+    flex: 1,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  spectrumBarFill: {
+    width: '100%',
+    borderRadius: 4,
+  },
+  spectrumLabel: {
+    fontSize: 9,
+    color: '#666',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  spectrumValue: {
+    fontSize: 8,
+    color: '#999',
+    marginTop: 2,
+  },
+  bandSelector: {
+    marginBottom: 15,
+  },
+  bandButton: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    marginRight: 10,
+    backgroundColor: '#fff',
+  },
+  bandButtonActive: {
+    backgroundColor: '#f0f0f0',
+  },
+  bandButtonText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+  },
+  bandButtonTextActive: {
+    color: '#333',
+  },
+  chartContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    alignItems: 'center',
+  },
+  chart: {
+    borderRadius: 10,
+  },
+  chartInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 10,
+    marginTop: 10,
+  },
+  chartLabel: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+  },
+  chartRange: {
+    fontSize: 11,
+    color: '#999',
+  },
+  timeSeriesEmpty: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 40,
+    alignItems: 'center',
+  },
+  timeSeriesEmptyText: {
+    color: '#999',
+    fontSize: 14,
+  },
+  rawToggle: {
+    backgroundColor: '#2196F3',
+    marginHorizontal: 15,
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  rawToggleText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  rawStats: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 5,
+  },
+  rawStatsText: {
+    fontSize: 11,
+    color: '#666',
+    textAlign: 'center',
   },
   bandRow: {
     backgroundColor: '#fff',
@@ -205,11 +643,21 @@ const styles = StyleSheet.create({
   bandInfo: {
     flex: 1,
   },
+  bandNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  colorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
   bandName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 3,
   },
   alphaBandName: {
     color: '#33691E',
@@ -217,6 +665,7 @@ const styles = StyleSheet.create({
   bandFreq: {
     fontSize: 12,
     color: '#999',
+    marginLeft: 16,
   },
   bandValueContainer: {
     alignItems: 'flex-end',
@@ -230,23 +679,6 @@ const styles = StyleSheet.create({
   bandSamples: {
     fontSize: 10,
     color: '#999',
-  },
-  infoRow: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
   },
   footer: {
     backgroundColor: '#E3F2FD',
