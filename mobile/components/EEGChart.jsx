@@ -1,15 +1,45 @@
-
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
+import LandscapeChartViewer from './LandscapeChartViewer';
 
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 40;
 
-export default function EEGChart({ bandData, rawBuffer }) {
-  const [selectedBand, setSelectedBand] = useState('AlphaLow');
+// Bands configuration - Define at top level
+const BANDS_CONFIG = [
+  { key: 'Delta', color: '#9C27B0', freq: '0.5-4 Hz' },
+  { key: 'Theta', color: '#3F51B5', freq: '4-8 Hz' },
+  { key: 'AlphaLow', color: '#4CAF50', freq: '8-10 Hz' },
+  { key: 'AlphaHigh', color: '#8BC34A', freq: '10-13 Hz' },
+  { key: 'BetaLow', color: '#FF9800', freq: '13-17 Hz' },
+  { key: 'BetaHigh', color: '#FF5722', freq: '17-30 Hz' },
+  { key: 'GammaLow', color: '#F44336', freq: '30-40 Hz' },
+  { key: 'GammaHigh', color: '#E91E63', freq: '40-50 Hz' },
+];
+
+export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'AlphaLow' }) {
+  const [selectedBand, setSelectedBand] = useState(initialSelectedBand);
   const [showRaw, setShowRaw] = useState(false);
+  const [showLandscape, setShowLandscape] = useState(false);
+
+  const bandSelectorRef = React.useRef(null);
+
+  // Update selected band if initialSelectedBand changes (from external navigation)
+  useEffect(() => {
+    if (initialSelectedBand) {
+      setSelectedBand(initialSelectedBand);
+      // Scroll to band selector when externally selected
+      if (bandSelectorRef.current) {
+        // Find index of selected band
+        const bandIndex = BANDS_CONFIG.findIndex(b => b.key === initialSelectedBand);
+        if (bandIndex !== -1 && bandSelectorRef.current) {
+          // Scroll to position (approximate)
+          bandSelectorRef.current.scrollTo({ x: bandIndex * 100, animated: true });
+        }
+      }
+    }
+  }, [initialSelectedBand]);
 
   // Throttle re-renders - only update every 500ms max
   const [lastRenderTime, setLastRenderTime] = useState(Date.now());
@@ -61,20 +91,21 @@ export default function EEGChart({ bandData, rawBuffer }) {
     const alphaHighVal = displayData.bands.AlphaHigh?.[displayData.bands.AlphaHigh.length - 1] || 0;
     const avgAlpha = (alphaLowVal + alphaHighVal) / 2;
 
-  // Bands configuration
-  const bands = [
-    { key: 'Delta', color: '#9C27B0', freq: '0.5-4 Hz' },
-    { key: 'Theta', color: '#3F51B5', freq: '4-8 Hz' },
-    { key: 'AlphaLow', color: '#4CAF50', freq: '8-10 Hz', highlight: true },
-    { key: 'AlphaHigh', color: '#8BC34A', freq: '10-13 Hz', highlight: true },
-    { key: 'BetaLow', color: '#FF9800', freq: '13-17 Hz' },
-    { key: 'BetaHigh', color: '#FF5722', freq: '17-30 Hz' },
-    { key: 'GammaLow', color: '#F44336', freq: '30-40 Hz' },
-    { key: 'GammaHigh', color: '#E91E63', freq: '40-50 Hz' },
-  ];
-
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Landscape Modal */}
+      <Modal
+        visible={showLandscape}
+        animationType="slide"
+        onRequestClose={() => setShowLandscape(false)}
+      >
+        <LandscapeChartViewer
+          bandData={displayData.bands}
+          initialBand={selectedBand}
+          onClose={() => setShowLandscape(false)}
+        />
+      </Modal>
+
       {/* Alpha Focus Card */}
       <View style={styles.alphaContainer}>
         <Text style={styles.alphaTitle}>🧠 Alpha Wave Power</Text>
@@ -99,43 +130,66 @@ export default function EEGChart({ bandData, rawBuffer }) {
       {/* Band Spectrum Visualization */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>📊 EEG Band Spectrum</Text>
-        <BandSpectrum bandData={displayData.bands} bands={bands} />
+        <BandSpectrum 
+          bandData={displayData.bands} 
+          bands={BANDS_CONFIG}
+          selectedBand={selectedBand}
+          onBandSelect={setSelectedBand}
+        />
       </View>
 
       {/* Individual Band Time Series */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📈 Band Time Series</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>📈 Band Time Series</Text>
+          <TouchableOpacity
+            style={styles.fullscreenButton}
+            onPress={() => setShowLandscape(true)}
+          >
+            <Text style={styles.fullscreenButtonText}>⛶ Landscape View</Text>
+          </TouchableOpacity>
+        </View>
         
         {/* Band Selector */}
         <ScrollView 
+          ref={bandSelectorRef}
           horizontal 
           showsHorizontalScrollIndicator={false}
           style={styles.bandSelector}
         >
-          {bands.map((band) => (
-            <TouchableOpacity
-              key={band.key}
-              style={[
-                styles.bandButton,
-                selectedBand === band.key && styles.bandButtonActive,
-                { borderColor: band.color }
-              ]}
-              onPress={() => setSelectedBand(band.key)}
-            >
-              <Text style={[
-                styles.bandButtonText,
-                selectedBand === band.key && styles.bandButtonTextActive
-              ]}>
-                {band.key}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {BANDS_CONFIG.map((band) => {
+            const hasDataForBand = displayData.bands[band.key]?.length > 0;
+            return (
+              <TouchableOpacity
+                key={band.key}
+                style={[
+                  styles.bandButton,
+                  selectedBand === band.key && styles.bandButtonActive,
+                  { borderColor: band.color },
+                  !hasDataForBand && styles.bandButtonDisabled,
+                ]}
+                onPress={() => hasDataForBand && setSelectedBand(band.key)}
+                disabled={!hasDataForBand}
+              >
+                <Text style={[
+                  styles.bandButtonText,
+                  selectedBand === band.key && styles.bandButtonTextActive,
+                  !hasDataForBand && styles.bandButtonTextDisabled,
+                ]}>
+                  {band.key}
+                </Text>
+                {!hasDataForBand && (
+                  <Text style={styles.bandButtonSubtext}>No data</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {/* Selected Band Chart */}
         <BandTimeSeriesChart 
           data={displayData.bands[selectedBand] || []}
-          color={bands.find(b => b.key === selectedBand)?.color || '#666'}
+          color={BANDS_CONFIG.find(b => b.key === selectedBand)?.color || '#666'}
           label={selectedBand}
         />
       </View>
@@ -167,48 +221,53 @@ export default function EEGChart({ bandData, rawBuffer }) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>📋 Current Values</Text>
         
-        {bands.map((band) => {
+        {BANDS_CONFIG.map((band) => {
           const values = displayData.bands[band.key];
           if (!values || values.length === 0) return null;
 
           const currentValue = values[values.length - 1];
 
           return (
-            <View 
-              key={band.key} 
-              style={[
-                styles.bandRow,
-                band.highlight && styles.alphaBandRow
-              ]}
+            <TouchableOpacity
+              key={band.key}
+              onPress={() => setSelectedBand(band.key)}
+              activeOpacity={0.7}
             >
-              <View style={styles.bandInfo}>
-                <View style={styles.bandNameRow}>
-                  <View style={[styles.colorDot, { backgroundColor: band.color }]} />
-                  <Text style={[
-                    styles.bandName,
-                    band.highlight && styles.alphaBandName
-                  ]}>
-                    {band.highlight ? '⭐ ' : ''}{band.key}
+              <View 
+                style={[
+                  styles.bandRow,
+                  selectedBand === band.key && styles.bandRowSelected,
+                ]}
+              >
+                <View style={styles.bandInfo}>
+                  <View style={styles.bandNameRow}>
+                    <View style={[styles.colorDot, { backgroundColor: band.color }]} />
+                    <Text style={styles.bandName}>
+                      {band.key}
+                    </Text>
+                    {selectedBand === band.key && (
+                      <Text style={styles.selectedIndicator}>👈 Viewing</Text>
+                    )}
+                  </View>
+                  <Text style={styles.bandFreq}>{band.freq}</Text>
+                </View>
+                <View style={styles.bandValueContainer}>
+                  <Text style={styles.bandValue}>
+                    {formatNumber(currentValue)}
+                  </Text>
+                  <Text style={styles.bandSamples}>
+                    {values.length} pts
                   </Text>
                 </View>
-                <Text style={styles.bandFreq}>{band.freq}</Text>
               </View>
-              <View style={styles.bandValueContainer}>
-                <Text style={styles.bandValue}>
-                  {formatNumber(currentValue)}
-                </Text>
-                <Text style={styles.bandSamples}>
-                  {values.length} pts
-                </Text>
-              </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </View>
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          ✨ Real-time EEG monitoring active
+          ✨ Tap any band to view its time series chart
         </Text>
       </View>
     </ScrollView>
@@ -226,8 +285,8 @@ export default function EEGChart({ bandData, rawBuffer }) {
   }
 }
 
-// Band Spectrum Bar Chart Component
-function BandSpectrum({ bandData, bands }) {
+// Band Spectrum Bar Chart Component - Now clickable
+function BandSpectrum({ bandData, bands, selectedBand, onBandSelect }) {
   const values = bands.map(band => {
     const data = bandData[band.key];
     return data && data.length > 0 ? data[data.length - 1] : 0;
@@ -240,20 +299,31 @@ function BandSpectrum({ bandData, bands }) {
       {bands.map((band, index) => {
         const value = values[index];
         const percentage = (value / maxValue) * 100;
+        const hasData = bandData[band.key]?.length > 0;
 
         return (
-          <View key={band.key} style={styles.spectrumBar}>
+          <TouchableOpacity
+            key={band.key}
+            style={styles.spectrumBar}
+            onPress={() => hasData && onBandSelect(band.key)}
+            disabled={!hasData}
+            activeOpacity={0.7}
+          >
             <View style={styles.spectrumBarBg}>
               <View 
                 style={[
                   styles.spectrumBarFill,
                   { 
                     height: `${percentage}%`,
-                    backgroundColor: band.color 
+                    backgroundColor: band.color,
+                    opacity: selectedBand === band.key ? 1 : 0.7,
                   }
                 ]} 
               />
             </View>
+            {selectedBand === band.key && (
+              <Text style={styles.spectrumSelected}>👆</Text>
+            )}
             <Text style={styles.spectrumLabel} numberOfLines={1}>
               {band.key.replace('AlphaLow', 'α↓')
                        .replace('AlphaHigh', 'α↑')
@@ -266,7 +336,7 @@ function BandSpectrum({ bandData, bands }) {
             <Text style={styles.spectrumValue}>
               {formatNumberShort(value)}
             </Text>
-          </View>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -471,11 +541,27 @@ const styles = StyleSheet.create({
   section: {
     padding: 15,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 15,
+  },
+  fullscreenButton: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  fullscreenButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   alphaContainer: {
     backgroundColor: '#E8F5E9',
@@ -535,6 +621,10 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: 4,
   },
+  spectrumSelected: {
+    fontSize: 12,
+    marginTop: 2,
+  },
   spectrumLabel: {
     fontSize: 9,
     color: '#666',
@@ -556,9 +646,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     marginRight: 10,
     backgroundColor: '#fff',
+    minHeight: 40,
+    justifyContent: 'center',
   },
   bandButtonActive: {
     backgroundColor: '#f0f0f0',
+    borderWidth: 3,
+  },
+  bandButtonDisabled: {
+    opacity: 0.4,
+    backgroundColor: '#f9f9f9',
   },
   bandButtonText: {
     fontSize: 12,
@@ -567,6 +664,15 @@ const styles = StyleSheet.create({
   },
   bandButtonTextActive: {
     color: '#333',
+    fontWeight: '700',
+  },
+  bandButtonTextDisabled: {
+    color: '#999',
+  },
+  bandButtonSubtext: {
+    fontSize: 9,
+    color: '#999',
+    marginTop: 2,
   },
   chartContainer: {
     backgroundColor: '#fff',
@@ -634,11 +740,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  alphaBandRow: {
-    backgroundColor: '#F1F8E9',
     borderWidth: 2,
-    borderColor: '#8BC34A',
+    borderColor: 'transparent',
+  },
+
+  bandRowSelected: {
+    borderColor: '#2196F3',
+    backgroundColor: '#E3F2FD',
   },
   bandInfo: {
     flex: 1,
@@ -659,8 +767,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
-  alphaBandName: {
-    color: '#33691E',
+
+  selectedIndicator: {
+    fontSize: 12,
+    color: '#2196F3',
+    marginLeft: 8,
+    fontWeight: '600',
   },
   bandFreq: {
     fontSize: 12,

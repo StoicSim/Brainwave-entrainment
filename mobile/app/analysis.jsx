@@ -14,8 +14,8 @@ export default function AnalysisScreen() {
   const bands = [
     { key: 'Delta', color: '#9C27B0', freq: '0.5-4 Hz', desc: 'Deep sleep' },
     { key: 'Theta', color: '#3F51B5', freq: '4-8 Hz', desc: 'Meditation' },
-    { key: 'AlphaLow', color: '#4CAF50', freq: '8-10 Hz', desc: 'Relaxation', highlight: true },
-    { key: 'AlphaHigh', color: '#8BC34A', freq: '10-13 Hz', desc: 'Calm focus', highlight: true },
+    { key: 'AlphaLow', color: '#4CAF50', freq: '8-10 Hz', desc: 'Relaxation' },
+    { key: 'AlphaHigh', color: '#8BC34A', freq: '10-13 Hz', desc: 'Calm focus'},
     { key: 'BetaLow', color: '#FF9800', freq: '13-17 Hz', desc: 'Active thinking' },
     { key: 'BetaHigh', color: '#FF5722', freq: '17-30 Hz', desc: 'High alertness' },
     { key: 'GammaLow', color: '#F44336', freq: '30-40 Hz', desc: 'Peak focus' },
