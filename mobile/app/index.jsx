@@ -1,5 +1,3 @@
-// mobile/app/index.jsx
-
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -14,16 +12,16 @@ export default function HomeScreen() {
         <Text style={styles.subtitle}>Alpha Wave Focus & Relaxation</Text>
         
         <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}> What is this?</Text>
+          <Text style={styles.infoTitle}>🧠 What is this?</Text>
           <Text style={styles.infoText}>
-            This app connects to your EMI EEG device to monitor your brainwaves in real-time. 
+            This app connects to your EEG device to monitor your brainwaves in real-time. 
             Our focus is on Alpha waves, which are associated with relaxation and calm focus.
           </Text>
         </View>
 
         <TouchableOpacity 
           style={styles.primaryButton}
-          onPress={() => router.push('/ble-monitor')}
+          onPress={() => router.push('/monitor')}
         >
           <Text style={styles.buttonText}>Start Monitoring</Text>
         </TouchableOpacity>
