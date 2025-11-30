@@ -47,9 +47,7 @@ const requestPermissions = async () => {
   return true;
 };
 
-/**
- * Scan for device
- */
+
 export const scanAndConnect = async (onDeviceFound) => {
   const isPermitted = await requestPermissions();
   if (!isPermitted) {
@@ -81,9 +79,7 @@ export const scanAndConnect = async (onDeviceFound) => {
   );
 };
 
-/**
- * Connect and monitor - Matches Python handle_notify logic
- */
+
 export const connectAndMonitor = async (device, onDataReceived) => {
   try {
     manager.stopDeviceScan();
@@ -95,14 +91,12 @@ export const connectAndMonitor = async (device, onDataReceived) => {
     await connectedDevice.discoverAllServicesAndCharacteristics();
     console.log('Services discovered. Starting data stream...');
 
-    // Reset decoder (Python equivalent: clear BUFFER)
     decoder.reset();
 
     let packetCount = 0;
     let validCount = 0;
     let invalidCount = 0;
 
-    // Monitor characteristic (Python: handle_notify function)
     connectedDevice.monitorCharacteristicForService(
       BLE_CONFIG.DATA_SERVICE_UUID,
       BLE_CONFIG.DATA_CHARACTERISTIC_UUID,
@@ -114,33 +108,26 @@ export const connectAndMonitor = async (device, onDataReceived) => {
 
         if (characteristic?.value) {
           try {
-            // Decode base64 to bytes (Python: data parameter)
             const rawBytes = Buffer.from(characteristic.value, 'base64');
             
-            // Parse ThinkGear stream (Python: packets = parse_thinkgear_stream(data))
             const packets = decoder.parseStream(rawBytes);
             
-            // Process each packet (Python: for p in packets)
             packets.forEach(p => {
               packetCount++;
               
               if (p.checksumValid) {
                 validCount++;
                 
-                // Send to callback (Python: update band_buffers and raw_buffer)
                 onDataReceived(p.parsed);
                 
-                // Log first few packets for debugging
                 if (validCount <= 5) {
                   console.log(`✓ Packet #${validCount}:`, p.parsed);
                 }
                 
-                // Log band powers when received (Python: print EEG Bands)
                 if (p.parsed.eegBands) {
                   console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] EEG Bands:`, p.parsed.eegBands);
                 }
                 
-                // Log signal quality and eSense values
                 if (p.parsed.poorSignal !== undefined) {
                   console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] Signal Quality: ${p.parsed.poorSignal}/200 (${p.parsed.poorSignal < 50 ? 'GOOD' : 'POOR'})`);
                 }
@@ -149,7 +136,6 @@ export const connectAndMonitor = async (device, onDataReceived) => {
                   console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] Attention: ${p.parsed.attention || 'N/A'}, Meditation: ${p.parsed.meditation || 'N/A'}`);
                 }
                 
-                // Log raw EEG (Python: print RawEEG)
                 if (p.parsed.rawEEG !== undefined && validCount <= 10) {
                   console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] RawEEG: ${p.parsed.rawEEG}`);
                 }
@@ -162,7 +148,6 @@ export const connectAndMonitor = async (device, onDataReceived) => {
               }
             });
             
-            // Log stats every 100 packets
             if (packetCount % 100 === 0 && packetCount > 0) {
               const successRate = ((validCount / packetCount) * 100).toFixed(1);
               console.log(`Stats: ${validCount}/${packetCount} valid (${successRate}%), buffer: ${decoder.getBufferSize()} bytes`);
@@ -182,9 +167,7 @@ export const connectAndMonitor = async (device, onDataReceived) => {
   }
 };
 
-/**
- * Disconnect device
- */
+
 export const disconnectDevice = async (device) => {
   if (device) {
     try {
@@ -197,9 +180,7 @@ export const disconnectDevice = async (device) => {
   }
 };
 
-/**
- * Debug: Discover device details
- */
+
 export const discoverDeviceDetails = async (device) => {
   let connectedDevice = null;
   try {

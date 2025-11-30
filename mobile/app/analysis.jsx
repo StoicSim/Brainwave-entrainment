@@ -1,4 +1,3 @@
-// mobile/app/analysis.jsx
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useBleContext } from '../context/BleContext';
@@ -40,7 +39,6 @@ export default function AnalysisScreen() {
         </View>
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* All Band Values */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>EEG Band Analysis</Text>
             
@@ -95,7 +93,6 @@ export default function AnalysisScreen() {
             })}
           </View>
 
-          {/* Raw EEG Stats */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Raw EEG Data</Text>
             <View style={styles.infoCard}>
@@ -116,7 +113,6 @@ export default function AnalysisScreen() {
             </View>
           </View>
 
-          {/* Session Summary */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Session Summary</Text>
             <View style={styles.summaryCard}>

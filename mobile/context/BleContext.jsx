@@ -1,4 +1,3 @@
-// mobile/context/BleContext.jsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { scanAndConnect, connectAndMonitor, disconnectDevice } from '../services/BleService';
@@ -41,7 +40,6 @@ export const BleProvider = ({ children }) => {
   const dataCountRef = useRef(0);
   const lastUpdateRef = useRef(Date.now());
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (device) {
@@ -50,14 +48,10 @@ export const BleProvider = ({ children }) => {
     };
   }, [device]);
 
-  /**
-   * Handle incoming data - Matches Python handle_notify logic
-   */
   const handleDataReceived = (parsedData) => {
     dataCountRef.current += 1;
     const now = Date.now();
 
-    // Update EEG band buffers when received
     if (parsedData.eegBands) {
       setBandData(prev => {
         const updated = { ...prev };
@@ -69,7 +63,6 @@ export const BleProvider = ({ children }) => {
       });
     }
 
-    // Update raw EEG buffer
     if (parsedData.rawEEG !== undefined) {
       setRawEEGBuffer(prev => {
         const newBuffer = [...prev, parsedData.rawEEG];
@@ -77,14 +70,12 @@ export const BleProvider = ({ children }) => {
       });
     }
 
-    // Update eSense metrics
     setMetrics(prev => ({
       attention: parsedData.attention !== undefined ? parsedData.attention : (parsedData.poorSignal !== undefined ? 0 : prev.attention),
       meditation: parsedData.meditation !== undefined ? parsedData.meditation : (parsedData.poorSignal !== undefined ? 0 : prev.meditation),
       poorSignal: parsedData.poorSignal !== undefined ? parsedData.poorSignal : prev.poorSignal,
     }));
 
-    // Throttle UI updates
     if (now - lastUpdateRef.current > 50) {
       lastUpdateRef.current = now;
     }
@@ -121,7 +112,6 @@ export const BleProvider = ({ children }) => {
       setDevice(null);
       setStatus('Disconnected');
       
-      // Reset all data
       setBandData({
         Delta: [],
         Theta: [],

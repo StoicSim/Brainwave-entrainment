@@ -23,17 +23,14 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
     height: Dimensions.get('window').height
   });
 
-  // Lock to landscape when component mounts
   React.useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
     
     return () => {
-      // Unlock when component unmounts
       ScreenOrientation.unlockAsync();
     };
   }, []);
 
-  // Scroll to initial band after layout
   React.useEffect(() => {
     const timer = setTimeout(() => {
       if (scrollViewRef.current && initialIndex >= 0) {
@@ -47,7 +44,6 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
     return () => clearTimeout(timer);
   }, [initialIndex]);
 
-  // Update dimensions on orientation change
   React.useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setDimensions({
@@ -85,7 +81,6 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
     <View style={styles.container}>
       <StatusBar hidden />
       
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: currentBand.color }]}>
         <View style={styles.headerLeft}>
           <Text style={styles.bandName}>{currentBand.key}</Text>
@@ -97,7 +92,6 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
         </TouchableOpacity>
       </View>
 
-      {/* Scrollable Charts */}
       <ScrollView
         ref={scrollViewRef}
         horizontal
@@ -107,7 +101,6 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
         scrollEventThrottle={16}
         style={styles.scrollView}
         onLayout={(e) => {
-          // Ensure we're on the right page after layout
           if (scrollViewRef.current && initialIndex >= 0) {
             scrollViewRef.current.scrollTo({
               x: initialIndex * dimensions.width,
@@ -128,7 +121,6 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
         ))}
       </ScrollView>
 
-      {/* Navigation Arrows */}
       {currentBandIndex > 0 && (
         <TouchableOpacity
           style={[styles.navButton, styles.navButtonLeft]}
@@ -147,7 +139,6 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
         </TouchableOpacity>
       )}
 
-      {/* Dots Indicator */}
       <View style={styles.dotsContainer}>
         {BANDS_CONFIG.map((band, index) => (
           <TouchableOpacity
@@ -175,7 +166,6 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
 }
 
 function LandscapeBandChart({ data, band, screenWidth, screenHeight }) {
-  // Memoize to prevent unnecessary re-renders
   const chartContent = React.useMemo(() => {
     if (!data || data.length < 3) {
       return (
@@ -186,7 +176,6 @@ function LandscapeBandChart({ data, band, screenWidth, screenHeight }) {
       );
     }
 
-    // Take last 40 points for better performance (reduced from 50)
     const displayData = data.slice(-40);
     
     const chartData = {

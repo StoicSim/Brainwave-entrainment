@@ -1,4 +1,3 @@
-// mobile/app/monitor.jsx
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useBleContext } from '../context/BleContext';
@@ -28,7 +27,6 @@ export default function MonitorScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Connection Controls */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Device Connection</Text>
           <View style={styles.controls}>
@@ -62,7 +60,6 @@ export default function MonitorScreen() {
           </View>
         ) : (
           <>
-            {/* Signal Warning */}
             {metrics.poorSignal > 50 && (
               <View style={styles.warningBanner}>
                 <Text style={styles.warningIcon}>⚠️</Text>
@@ -77,7 +74,6 @@ export default function MonitorScreen() {
               </View>
             )}
 
-            {/* Metrics Cards */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Real-time Metrics</Text>
               <View style={styles.metricsGrid}>
@@ -126,7 +122,6 @@ export default function MonitorScreen() {
               </View>
             </View>
 
-            {/* Quick Stats */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Session Info</Text>
               <View style={styles.infoCard}>

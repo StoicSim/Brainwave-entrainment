@@ -6,7 +6,6 @@ import LandscapeChartViewer from './LandscapeChartViewer';
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 40;
 
-// Bands configuration - Define at top level
 const BANDS_CONFIG = [
   { key: 'Delta', color: '#9C27B0', freq: '0.5-4 Hz' },
   { key: 'Theta', color: '#3F51B5', freq: '4-8 Hz' },
@@ -25,27 +24,21 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
 
   const bandSelectorRef = React.useRef(null);
 
-  // Update selected band if initialSelectedBand changes (from external navigation)
   useEffect(() => {
     if (initialSelectedBand) {
       setSelectedBand(initialSelectedBand);
-      // Scroll to band selector when externally selected
       if (bandSelectorRef.current) {
-        // Find index of selected band
         const bandIndex = BANDS_CONFIG.findIndex(b => b.key === initialSelectedBand);
         if (bandIndex !== -1 && bandSelectorRef.current) {
-          // Scroll to position (approximate)
           bandSelectorRef.current.scrollTo({ x: bandIndex * 100, animated: true });
         }
       }
     }
   }, [initialSelectedBand]);
 
-  // Throttle re-renders - only update every 500ms max
   const [lastRenderTime, setLastRenderTime] = useState(Date.now());
   const shouldRender = Date.now() - lastRenderTime > 500;
 
-  // Use effect to control render throttling
   useEffect(() => {
     if (!shouldRender) return;
     
@@ -56,15 +49,12 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
     return () => clearTimeout(timer);
   }, [bandData, rawBuffer]);
 
-  // Catch any render errors
   try {
-    // Use props directly - no batching needed, already handled in parent
     const displayData = {
       bands: bandData || {},
       raw: rawBuffer || [],
     };
 
-    // Safety check
     if (!displayData.bands) {
       return (
         <View style={styles.emptyContainer}>
@@ -86,14 +76,12 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
       );
     }
 
-    // Calculate Alpha stats
     const alphaLowVal = displayData.bands.AlphaLow?.[displayData.bands.AlphaLow.length - 1] || 0;
     const alphaHighVal = displayData.bands.AlphaHigh?.[displayData.bands.AlphaHigh.length - 1] || 0;
     const avgAlpha = (alphaLowVal + alphaHighVal) / 2;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Landscape Modal */}
       <Modal
         visible={showLandscape}
         animationType="slide"
@@ -106,7 +94,6 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
         />
       </Modal>
 
-      {/* Alpha Focus Card */}
       <View style={styles.alphaContainer}>
         <Text style={styles.alphaTitle}>🧠 Alpha Wave Power</Text>
         <Text style={styles.alphaValue}>
@@ -127,7 +114,6 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
         </Text>
       </View>
 
-      {/* Band Spectrum Visualization */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>📊 EEG Band Spectrum</Text>
         <BandSpectrum 
@@ -138,7 +124,6 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
         />
       </View>
 
-      {/* Individual Band Time Series */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>📈 Band Time Series</Text>
@@ -150,7 +135,6 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
           </TouchableOpacity>
         </View>
         
-        {/* Band Selector */}
         <ScrollView 
           ref={bandSelectorRef}
           horizontal 
@@ -186,7 +170,6 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
           })}
         </ScrollView>
 
-        {/* Selected Band Chart */}
         <BandTimeSeriesChart 
           data={displayData.bands[selectedBand] || []}
           color={BANDS_CONFIG.find(b => b.key === selectedBand)?.color || '#666'}
@@ -194,7 +177,6 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
         />
       </View>
 
-      {/* Raw EEG Toggle */}
       <TouchableOpacity 
         style={styles.rawToggle}
         onPress={() => setShowRaw(!showRaw)}
@@ -204,7 +186,6 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
         </Text>
       </TouchableOpacity>
 
-      {/* Raw EEG Visualization */}
       {showRaw && displayData.raw && displayData.raw.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📡 Raw EEG (512 Hz)</Text>
@@ -273,7 +254,6 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
     </ScrollView>
   );
   } catch (err) {
-    // Catch and display any errors
     console.error('EEGChart render error:', err);
     return (
       <View style={styles.emptyContainer}>
@@ -285,7 +265,6 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
   }
 }
 
-// Band Spectrum Bar Chart Component - Now clickable
 function BandSpectrum({ bandData, bands, selectedBand, onBandSelect }) {
   const values = bands.map(band => {
     const data = bandData[band.key];
@@ -343,16 +322,12 @@ function BandSpectrum({ bandData, bands, selectedBand, onBandSelect }) {
   );
 }
 
-// Band Time Series using react-native-chart-kit - Memoized to prevent crashes
 const BandTimeSeriesChart = React.memo(({ data, color, label }) => {
-  // Memoize chart data to prevent unnecessary re-renders
   const chartData = useMemo(() => {
     if (!data || data.length < 3) {
-      // Need at least 3 points for chart-kit
       return null;
     }
 
-    // Take last 20 points for better performance
     const displayData = data.slice(-20);
     
     return {
@@ -401,12 +376,12 @@ const BandTimeSeriesChart = React.memo(({ data, color, label }) => {
             stroke: color,
           },
           propsForBackgroundLines: {
-            strokeDasharray: '', // solid lines
+            strokeDasharray: '', 
             stroke: '#e0e0e0',
             strokeWidth: 1,
           },
         }}
-        bezier // Smooth curves
+        bezier 
         style={styles.chart}
         withVerticalLabels={false}
         withHorizontalLabels={true}
@@ -426,25 +401,20 @@ const BandTimeSeriesChart = React.memo(({ data, color, label }) => {
     </View>
   );
 }, (prevProps, nextProps) => {
-  // Custom comparison - only re-render if data actually changed
   const prevLength = prevProps.data?.length || 0;
   const nextLength = nextProps.data?.length || 0;
   const prevLast = prevProps.data?.[prevLength - 1];
   const nextLast = nextProps.data?.[nextLength - 1];
   
-  // Only update if length changed or last value changed
   return prevLength === nextLength && prevLast === nextLast && prevProps.color === nextProps.color;
 });
 
-// Raw EEG Chart
 function RawEEGChart({ data }) {
   const chartData = useMemo(() => {
     if (!data || data.length < 10) {
-      // Need at least 10 points for raw EEG visualization
       return null;
     }
 
-    // Take last 50 samples for raw EEG
     const displayData = data.slice(-50);
     
     return {
@@ -491,7 +461,7 @@ function RawEEGChart({ data }) {
             strokeWidth: 1,
           },
         }}
-        bezier={false} // Sharp lines for raw EEG
+        bezier={false} 
         style={styles.chart}
         withVerticalLabels={false}
         withHorizontalLabels={false}

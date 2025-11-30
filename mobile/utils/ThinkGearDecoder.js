@@ -14,11 +14,7 @@ class ThinkGearDecoder {
     this.buffer = [];
   }
 
-  /**
-   * 
-   * @param {Uint8Array|Array} data - Raw bytes from BLE
-   * @returns {Array} Array of parsed packets
-   */
+  
   parseStream(data) {
     this.buffer.push(...Array.from(data));
     
@@ -59,7 +55,6 @@ class ThinkGearDecoder {
 
         const length = CODE_LENGTHS[code];
         if (length === undefined) {
-          // Unknown code, skip next byte
           j += 1;
           continue;
         }
@@ -71,7 +66,6 @@ class ThinkGearDecoder {
         const valBytes = payload.slice(j, j + length);
         j += length;
 
-        // Decode based on code (Python logic)
         if (code === 0x02) {
           parsedValues.poorSignal = valBytes[0];
         } else if (code === 0x04) {
@@ -123,8 +117,6 @@ class ThinkGearDecoder {
   }
 }
 
-// Export singleton instance
 export const decoder = new ThinkGearDecoder();
 
-// Export class
 export default ThinkGearDecoder;

@@ -17,8 +17,8 @@ export default about
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,               // take full height
-    justifyContent: 'center', // vertical center
-    alignItems: 'center',      // horizontal center
+    flex: 1,              
+    justifyContent: 'center', 
+    alignItems: 'center',     
   },
 })

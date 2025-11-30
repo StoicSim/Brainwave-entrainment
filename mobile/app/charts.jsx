@@ -1,4 +1,3 @@
-// mobile/app/charts.jsx
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useBleContext } from '../context/BleContext';

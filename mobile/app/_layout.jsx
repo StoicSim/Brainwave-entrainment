@@ -7,14 +7,12 @@ function LayoutContent() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Only show tab bar on these screens
   const showTabBar = pathname === '/monitor' || pathname === '/charts' || pathname === '/analysis';
 
   return (
     <View style={styles.container}>
       <Slot />
       
-      {/* Tab Bar Footer - Only shown on monitor/charts/analysis screens */}
       {showTabBar && (
         <View style={styles.tabBar}>
           <TouchableOpacity 
