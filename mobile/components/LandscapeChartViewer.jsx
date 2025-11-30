@@ -17,12 +17,14 @@ const BANDS_CONFIG = [
 export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow', onClose }) {
   const initialIndex = BANDS_CONFIG.findIndex(b => b.key === initialBand);
   const [currentBandIndex, setCurrentBandIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
-  const scrollViewRef = useRef(null);
+  const bandSelectorRef = useRef(null);
+  
   const [dimensions, setDimensions] = useState({
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height
   });
 
+  // Lock to landscape when component mounts
   React.useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
     
@@ -31,19 +33,7 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
     };
   }, []);
 
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      if (scrollViewRef.current && initialIndex >= 0) {
-        scrollViewRef.current.scrollTo({
-          x: initialIndex * dimensions.width,
-          animated: false,
-        });
-      }
-    }, 100);
-    
-    return () => clearTimeout(timer);
-  }, [initialIndex]);
-
+  // Update dimensions on orientation change
   React.useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setDimensions({
@@ -56,22 +46,13 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
   }, []);
 
   const currentBand = BANDS_CONFIG[currentBandIndex];
-  const bandValues = bandData[currentBand.key] || [];
-  
-  const handleScroll = (event) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / dimensions.width);
-    if (index !== currentBandIndex && index >= 0 && index < BANDS_CONFIG.length) {
-      setCurrentBandIndex(index);
-    }
-  };
 
-  const navigateToBand = (direction) => {
-    const newIndex = currentBandIndex + direction;
-    if (newIndex >= 0 && newIndex < BANDS_CONFIG.length) {
-      setCurrentBandIndex(newIndex);
-      scrollViewRef.current?.scrollTo({
-        x: newIndex * dimensions.width,
+  const handleBandSelect = (index) => {
+    setCurrentBandIndex(index);
+    // Scroll selector to show selected band
+    if (bandSelectorRef.current) {
+      bandSelectorRef.current.scrollTo({
+        x: index * 110,
         animated: true,
       });
     }
@@ -81,193 +62,187 @@ export default function LandscapeChartViewer({ bandData, initialBand = 'AlphaLow
     <View style={styles.container}>
       <StatusBar hidden />
       
+      {/* Header with Band Selector */}
       <View style={[styles.header, { backgroundColor: currentBand.color }]}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.bandName}>{currentBand.key}</Text>
-          <Text style={styles.bandFreq}>{currentBand.freq} • {currentBand.desc}</Text>
-        </View>
-        
-        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-          <Text style={styles.closeButtonText}>✕ Exit</Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        ref={scrollViewRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        style={styles.scrollView}
-        onLayout={(e) => {
-          if (scrollViewRef.current && initialIndex >= 0) {
-            scrollViewRef.current.scrollTo({
-              x: initialIndex * dimensions.width,
-              animated: false,
-            });
-          }
-        }}
-      >
-        {BANDS_CONFIG.map((band, index) => (
-          <View key={band.key} style={[styles.chartPage, { width: dimensions.width }]}>
-            <LandscapeBandChart
-              data={bandData[band.key] || []}
-              band={band}
-              screenWidth={dimensions.width}
-              screenHeight={dimensions.height}
-            />
+        <View style={styles.headerTop}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.bandName}>{currentBand.key}</Text>
+            <Text style={styles.bandFreq}>{currentBand.freq} • {currentBand.desc}</Text>
           </View>
-        ))}
-      </ScrollView>
-
-      {currentBandIndex > 0 && (
-        <TouchableOpacity
-          style={[styles.navButton, styles.navButtonLeft]}
-          onPress={() => navigateToBand(-1)}
-        >
-          <Text style={styles.navButtonText}>‹</Text>
-        </TouchableOpacity>
-      )}
-      
-      {currentBandIndex < BANDS_CONFIG.length - 1 && (
-        <TouchableOpacity
-          style={[styles.navButton, styles.navButtonRight]}
-          onPress={() => navigateToBand(1)}
-        >
-          <Text style={styles.navButtonText}>›</Text>
-        </TouchableOpacity>
-      )}
-
-      <View style={styles.dotsContainer}>
-        {BANDS_CONFIG.map((band, index) => (
-          <TouchableOpacity
-            key={band.key}
-            onPress={() => {
-              setCurrentBandIndex(index);
-              scrollViewRef.current?.scrollTo({
-                x: index * dimensions.width,
-                animated: true,
-              });
-            }}
-          >
-            <View
-              style={[
-                styles.dot,
-                index === currentBandIndex && styles.dotActive,
-                { backgroundColor: index === currentBandIndex ? band.color : '#ccc' }
-              ]}
-            />
+          
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Text style={styles.closeButtonText}>✕ Exit</Text>
           </TouchableOpacity>
-        ))}
+        </View>
+
+        {/* Band Selector Buttons */}
+        <ScrollView 
+          ref={bandSelectorRef}
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.bandSelector}
+          contentContainerStyle={styles.bandSelectorContent}
+        >
+          {BANDS_CONFIG.map((band, index) => {
+            const hasData = bandData[band.key]?.length > 0;
+            return (
+              <TouchableOpacity
+                key={band.key}
+                style={[
+                  styles.bandButton,
+                  currentBandIndex === index && styles.bandButtonActive,
+                  { borderColor: band.color },
+                  !hasData && styles.bandButtonDisabled,
+                ]}
+                onPress={() => hasData && handleBandSelect(index)}
+                disabled={!hasData}
+              >
+                <Text style={[
+                  styles.bandButtonText,
+                  currentBandIndex === index && styles.bandButtonTextActive,
+                  !hasData && styles.bandButtonTextDisabled,
+                ]}>
+                  {band.key}
+                </Text>
+                {!hasData && (
+                  <Text style={styles.bandButtonSubtext}>No data</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
-    </View>
+
+      {/* Single Chart View - Only render current band */}
+      <View style={styles.chartContainer}>
+        <LandscapeBandChart
+          data={bandData[currentBand.key] || []}
+          band={currentBand}
+          screenWidth={dimensions.width}
+          screenHeight={dimensions.height}
+        />
+      </View>
+
+          </View>
   );
 }
 
-function LandscapeBandChart({ data, band, screenWidth, screenHeight }) {
-  const chartContent = React.useMemo(() => {
-    if (!data || data.length < 3) {
-      return (
-        <View style={styles.emptyChart}>
-          <Text style={styles.emptyText}>📊 Collecting data...</Text>
-          <Text style={styles.emptySubtext}>{data?.length || 0}/3 points needed</Text>
-        </View>
-      );
-    }
-
-    const displayData = data.slice(-40);
-    
-    const chartData = {
-      labels: displayData.map((_, i) => ''),
-      datasets: [{
-        data: displayData,
-        color: (opacity = 1) => band.color,
-        strokeWidth: 3,
-      }],
-    };
-
-    const minVal = Math.min(...displayData);
-    const maxVal = Math.max(...displayData);
-    const currentVal = displayData[displayData.length - 1];
-    const avgVal = displayData.reduce((a, b) => a + b, 0) / displayData.length;
-
+// Memoized chart component for better performance
+const LandscapeBandChart = React.memo(({ data, band, screenWidth, screenHeight }) => {
+  if (!data || data.length < 3) {
     return (
-      <>
-        <LineChart
-          data={chartData}
-          width={screenWidth - 40}
-          height={screenHeight - 200}
-          chartConfig={{
-            backgroundColor: '#1e1e1e',
-            backgroundGradientFrom: '#1e1e1e',
-            backgroundGradientTo: '#2a2a2a',
-            decimalPlaces: 0,
-            color: (opacity = 1) => band.color,
-            labelColor: (opacity = 1) => '#fff',
-            style: {
-              borderRadius: 16,
-            },
-            propsForDots: {
-              r: '4',
-              strokeWidth: '2',
-              stroke: band.color,
-            },
-            propsForBackgroundLines: {
-              strokeDasharray: '',
-              stroke: '#444',
-              strokeWidth: 1,
-            },
-          }}
-          bezier
-          style={styles.chart}
-          withVerticalLabels={true}
-          withHorizontalLabels={true}
-          withInnerLines={true}
-          withOuterLines={false}
-          withVerticalLines={false}
-          segments={5}
-        />
-        
-        <View style={styles.statsContainer}>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Current</Text>
-            <Text style={[styles.statValue, { color: band.color }]}>
-              {formatNumber(currentVal)}
-            </Text>
-          </View>
-          
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Average</Text>
-            <Text style={styles.statValue}>
-              {formatNumber(avgVal)}
-            </Text>
-          </View>
-          
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Range</Text>
-            <Text style={styles.statValue}>
-              {formatNumber(minVal)} - {formatNumber(maxVal)}
-            </Text>
-          </View>
-          
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Samples</Text>
-            <Text style={styles.statValue}>
-              {displayData.length}
-            </Text>
-          </View>
-        </View>
-      </>
+      <View style={styles.emptyChart}>
+        <Text style={styles.emptyText}>📊 Collecting data...</Text>
+        <Text style={styles.emptySubtext}>{data?.length || 0}/3 points needed</Text>
+      </View>
     );
-  }, [data, band.color, band.key, screenWidth, screenHeight]);
+  }
+
+  // Take last 30 points for optimal performance
+  const displayData = data.slice(-30);
+  
+  const chartData = {
+    labels: displayData.map((_, i) => ''),
+    datasets: [{
+      data: displayData,
+      color: (opacity = 1) => band.color,
+      strokeWidth: 3,
+    }],
+  };
+
+  const minVal = Math.min(...displayData);
+  const maxVal = Math.max(...displayData);
+  const currentVal = displayData[displayData.length - 1];
+  const avgVal = displayData.reduce((a, b) => a + b, 0) / displayData.length;
 
   return (
     <View style={styles.chartContent}>
-      {chartContent}
+      <LineChart
+        data={chartData}
+        width={screenWidth - 60}
+        height={screenHeight - 280}
+        chartConfig={{
+          backgroundColor: '#1e1e1e',
+          backgroundGradientFrom: '#1e1e1e',
+          backgroundGradientTo: '#2a2a2a',
+          decimalPlaces: 0,
+          color: (opacity = 1) => band.color,
+          labelColor: (opacity = 1) => '#fff',
+          style: {
+            borderRadius: 16,
+          },
+          propsForDots: {
+            r: '4',
+            strokeWidth: '2',
+            stroke: band.color,
+          },
+          propsForBackgroundLines: {
+            strokeDasharray: '',
+            stroke: '#444',
+            strokeWidth: 1,
+          },
+        }}
+        bezier
+        style={styles.chart}
+        withVerticalLabels={true}
+        withHorizontalLabels={true}
+        withInnerLines={true}
+        withOuterLines={false}
+        withVerticalLines={false}
+        segments={4}
+      />
+      
+      <View style={styles.statsContainer}>
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>Current</Text>
+          <Text style={[styles.statValue, { color: band.color }]}>
+            {formatNumber(currentVal)}
+          </Text>
+        </View>
+        
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>Average</Text>
+          <Text style={styles.statValue}>
+            {formatNumber(avgVal)}
+          </Text>
+        </View>
+        
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>Min</Text>
+          <Text style={styles.statValue}>
+            {formatNumber(minVal)}
+          </Text>
+        </View>
+
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>Max</Text>
+          <Text style={styles.statValue}>
+            {formatNumber(maxVal)}
+          </Text>
+        </View>
+        
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>Samples</Text>
+          <Text style={styles.statValue}>
+            {displayData.length}
+          </Text>
+        </View>
+      </View>
     </View>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if data actually changed
+  const prevLength = prevProps.data?.length || 0;
+  const nextLength = nextProps.data?.length || 0;
+  const prevLast = prevProps.data?.[prevLength - 1];
+  const nextLast = nextProps.data?.[nextLength - 1];
+  
+  return prevLength === nextLength && 
+         prevLast === nextLast && 
+         prevProps.band.key === nextProps.band.key &&
+         prevProps.screenWidth === nextProps.screenWidth &&
+         prevProps.screenHeight === nextProps.screenHeight;
+});
 
 function formatNumber(num) {
   if (num === null || num === undefined || isNaN(num)) return '0';
@@ -280,11 +255,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   header: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    marginBottom: 12,
   },
   headerLeft: {
     flex: 1,
@@ -311,10 +289,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  scrollView: {
-    flex: 1,
+  bandSelector: {
+    maxHeight: 60,
   },
-  chartPage: {
+  bandSelectorContent: {
+    paddingVertical: 8,
+    gap: 10,
+  },
+  bandButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 2,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginRight: 10,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  bandButtonActive: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderWidth: 3,
+  },
+  bandButtonDisabled: {
+    opacity: 0.3,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  bandButtonText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  bandButtonTextActive: {
+    fontWeight: '800',
+  },
+  bandButtonTextDisabled: {
+    color: '#999',
+  },
+  bandButtonSubtext: {
+    fontSize: 10,
+    color: '#ccc',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  chartContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -331,23 +350,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
+    gap: 10,
   },
   statBox: {
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 10,
-    minWidth: 120,
+    minWidth: 100,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#aaa',
-    marginBottom: 5,
+    marginBottom: 4,
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
   },
@@ -365,44 +385,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#aaa',
   },
-  navButton: {
-    position: 'absolute',
-    top: '50%',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: -30,
-  },
-  navButtonLeft: {
-    left: 20,
-  },
-  navButtonRight: {
-    right: 20,
-  },
-  navButtonText: {
-    fontSize: 40,
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+  navInfo: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
     paddingVertical: 10,
-    gap: 8,
+    alignItems: 'center',
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ccc',
-  },
-  dotActive: {
-    width: 24,
-    height: 8,
-    borderRadius: 4,
+  navInfoText: {
+    color: '#fff',
+    fontSize: 12,
+    opacity: 0.8,
   },
 });
