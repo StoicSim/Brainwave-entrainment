@@ -110,14 +110,26 @@ def parse_thinkgear_stream(data):
 def handle_notify(sender, data):
     packets = parse_thinkgear_stream(data)
     for p in packets:
-       
+        # Signal Quality
+        if "PoorSignal" in p["parsed"]:
+            print(f"[{p['timestamp']}] Signal Quality: {p['parsed']['PoorSignal']} (0=Good, 200=Poor)")
+        
+        # Attention
+        if "Attention" in p["parsed"]:
+            print(f"[{p['timestamp']}] Attention: {p['parsed']['Attention']}")
+        
+        # Meditation
+        if "Meditation" in p["parsed"]:
+            print(f"[{p['timestamp']}] Meditation: {p['parsed']['Meditation']}")
+        
+        # EEG Bands
         if "EEG_Bands" in p["parsed"]:
             band_dict = p["parsed"]["EEG_Bands"]
             for band, val in band_dict.items():
                 band_buffers[band].append(val)
             print(f"[{p['timestamp']}] EEG Bands:", band_dict)
 
-        
+        # Raw EEG
         if "RawEEG" in p["parsed"]:
             raw_buffer.append(p["parsed"]["RawEEG"])
             # print(f"[{p['timestamp']}] RawEEG:", p["parsed"]["RawEEG"])

@@ -9,14 +9,15 @@ from matplotlib.animation import FuncAnimation
 import threading
 import time
 from scipy.signal import butter, lfilter
+import csv
+import os
+import uuid
 
 
 DEVICE_ADDRESS = "34:81:F4:33:AE:91"  
 
 NOTIFY_UUIDS = [
-   
     "49535343-1e4d-4bd9-ba61-23c647249616",
-   
 ]
 
 SYNC_BYTES = b'\xAA\xAA'
@@ -30,11 +31,23 @@ CODE_LENGTHS = {
 
 BUFFER = bytearray()
 
-
+# Data buffers
 MAX_POINTS = 300
 band_buffers = {band: deque(maxlen=MAX_POINTS) for band in
                 ['Delta','Theta','AlphaLow','AlphaHigh','BetaLow','BetaHigh','GammaLow','GammaHigh']}
-raw_buffer = deque(maxlen=1000)  
+raw_buffer = deque(maxlen=1000)
+attention_buffer = deque(maxlen=MAX_POINTS)
+meditation_buffer = deque(maxlen=MAX_POINTS)
+
+# CSV recording variables
+csv_file = None
+csv_writer = None
+session_id = None
+session_name = None
+duration_minutes = None
+music_involved = None
+music_link = None
+recording_started = False
 
 
 def parse_thinkgear_stream(data):
@@ -107,20 +120,100 @@ def parse_thinkgear_stream(data):
     return results
 
 
+def initialize_csv():
+    global csv_file, csv_writer, recording_started
+    
+    # Create folder structure
+    folder = "with_music" if music_involved else "no_music"
+    base_path = os.path.join("EEG_Data", folder)
+    os.makedirs(base_path, exist_ok=True)
+    
+    # Create filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{session_name}_{timestamp}.csv"
+    filepath = os.path.join(base_path, filename)
+    
+    # Open CSV file
+    csv_file = open(filepath, 'w', newline='')
+    csv_writer = csv.writer(csv_file)
+    
+    # Write header
+    header = [
+        "session_id", "timestamp", "session_name", "duration_minutes",
+        "music_involved", "music_link",
+        "Delta", "Theta", "AlphaLow", "AlphaHigh",
+        "BetaLow", "BetaHigh", "GammaLow", "GammaHigh",
+        "Attention", "Meditation"
+    ]
+    csv_writer.writerow(header)
+    
+    recording_started = True
+    print(f"\n✓ CSV recording started: {filepath}\n")
+
+
+def write_to_csv(timestamp, bands, attention=None, meditation=None):
+    if csv_writer is None:
+        return
+    
+    row = [
+        session_id,
+        timestamp,
+        session_name,
+        duration_minutes,
+        "yes" if music_involved else "no",
+        music_link if music_link else "",
+        bands.get('Delta', ''),
+        bands.get('Theta', ''),
+        bands.get('AlphaLow', ''),
+        bands.get('AlphaHigh', ''),
+        bands.get('BetaLow', ''),
+        bands.get('BetaHigh', ''),
+        bands.get('GammaLow', ''),
+        bands.get('GammaHigh', ''),
+        attention if attention is not None else '',
+        meditation if meditation is not None else ''
+    ]
+    csv_writer.writerow(row)
+    csv_file.flush()  # Ensure data is written immediately
+
+
 def handle_notify(sender, data):
+    global recording_started
+    
     packets = parse_thinkgear_stream(data)
     for p in packets:
-       
+        current_attention = None
+        current_meditation = None
+        
+        # Parse Attention
+        if "Attention" in p["parsed"]:
+            current_attention = p["parsed"]["Attention"]
+            attention_buffer.append(current_attention)
+            print(f"[{p['timestamp']}] Attention: {current_attention}")
+        
+        # Parse Meditation
+        if "Meditation" in p["parsed"]:
+            current_meditation = p["parsed"]["Meditation"]
+            meditation_buffer.append(current_meditation)
+            print(f"[{p['timestamp']}] Meditation: {current_meditation}")
+        
+        # Parse EEG Bands
         if "EEG_Bands" in p["parsed"]:
             band_dict = p["parsed"]["EEG_Bands"]
             for band, val in band_dict.items():
                 band_buffers[band].append(val)
             print(f"[{p['timestamp']}] EEG Bands:", band_dict)
-
+            
+            # Initialize CSV on first band data
+            if not recording_started:
+                initialize_csv()
+            
+            # Write to CSV
+            write_to_csv(p['timestamp'], band_dict, current_attention, current_meditation)
         
+        # Parse Raw EEG
         if "RawEEG" in p["parsed"]:
             raw_buffer.append(p["parsed"]["RawEEG"])
-            # print(f"[{p['timestamp']}] RawEEG:", p["parsed"]["RawEEG"])
 
 
 def butter_bandpass(lowcut, highcut, fs, order=4):
@@ -140,7 +233,7 @@ def start_live_plot():
     fig, axs = plt.subplots(6, 2, figsize=(14, 12))
     fig.suptitle("Real-Time EEG Data")
 
-   
+    # Band power plots
     axes = axs.flat[:8]
     lines = {}
     for ax, band in zip(axes, band_buffers.keys()):
@@ -150,7 +243,7 @@ def start_live_plot():
         line, = ax.plot([], [], lw=1)
         lines[band] = line
 
-    
+    # Filtered EEG plots
     filtered_bands = ['Delta','Theta','Alpha','Beta','Gamma']
     filt_axes = axs.flat[8:]
     filt_lines = {}
@@ -161,12 +254,11 @@ def start_live_plot():
         line, = ax.plot([], [], lw=1)
         filt_lines[band] = line
 
-   
     filt_buffers = {band: deque(maxlen=MAX_POINTS) for band in filtered_bands}
 
     # Animation
     def animate(frame):
-       
+        # Update band power plots
         for band, line in lines.items():
             y = list(band_buffers[band])
             x = list(range(len(y)))  
@@ -177,7 +269,7 @@ def start_live_plot():
                 max_y = max(y)
                 line.axes.set_ylim(min_y*0.9, max_y*1.1)
 
-        
+        # Update filtered plots
         if len(raw_buffer) > 0:
             raw_data = list(raw_buffer)
             filt_buffers['Delta'].extend(bandpass_filter(raw_data, 0.5, 4, fs)[-len(raw_data):])
@@ -216,10 +308,50 @@ async def ble_task():
             await asyncio.sleep(1)
 
 
-if __name__ == "__main__":
+def get_session_info():
+    global session_id, session_name, duration_minutes, music_involved, music_link
     
-    ble_thread = threading.Thread(target=lambda: asyncio.run(ble_task()), daemon=True)
-    ble_thread.start()
+    print("\n" + "="*50)
+    print("EEG Recording Session Setup")
+    print("="*50 + "\n")
+    
+    # Generate session ID
+    session_id = str(uuid.uuid4())[:8]
+    print(f"Session ID: {session_id}\n")
+    
+    # Get session details
+    session_name = input("Enter session name: ").strip()
+    duration_minutes = input("Enter duration (minutes): ").strip()
+    
+    music_input = input("Music involved? (yes/no): ").strip().lower()
+    music_involved = music_input in ['yes', 'y']
+    
+    if music_involved:
+        music_link = input("Enter music link: ").strip()
+    else:
+        music_link = None
+    
+    print("\n" + "="*50)
+    print("Session configured successfully!")
+    print("="*50 + "\n")
 
-    
-    start_live_plot()
+
+if __name__ == "__main__":
+    try:
+        # Get session information
+        get_session_info()
+        
+        # Start BLE thread
+        ble_thread = threading.Thread(target=lambda: asyncio.run(ble_task()), daemon=True)
+        ble_thread.start()
+
+        # Start live plotting
+        start_live_plot()
+        
+    except KeyboardInterrupt:
+        print("\n\nRecording stopped by user.")
+    finally:
+        # Close CSV file
+        if csv_file:
+            csv_file.close()
+            print("CSV file saved successfully.")
