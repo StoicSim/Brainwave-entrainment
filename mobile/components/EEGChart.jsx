@@ -19,7 +19,6 @@ const BANDS_CONFIG = [
 
 export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'AlphaLow' }) {
   const [selectedBand, setSelectedBand] = useState(initialSelectedBand);
-  const [showRaw, setShowRaw] = useState(false);
   const [showLandscape, setShowLandscape] = useState(false);
 
   const bandSelectorRef = React.useRef(null);
@@ -177,26 +176,10 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
         />
       </View>
 
-      <TouchableOpacity 
-        style={styles.rawToggle}
-        onPress={() => setShowRaw(!showRaw)}
-      >
-        <Text style={styles.rawToggleText}>
-          {showRaw ? '📉 Hide' : '📡 Show'} Raw EEG Signal
-        </Text>
-      </TouchableOpacity>
+      
 
-      {showRaw && displayData.raw && displayData.raw.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📡 Raw EEG (512 Hz)</Text>
-          <RawEEGChart data={displayData.raw} />
-          <View style={styles.rawStats}>
-            <Text style={styles.rawStatsText}>
-              Samples: {displayData.raw.length} | Latest: {displayData.raw[displayData.raw.length - 1]}
-            </Text>
-          </View>
-        </View>
-      )}
+      
+      
 
       {/* All Band Values Table */}
       <View style={styles.section}>
