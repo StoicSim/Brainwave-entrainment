@@ -192,6 +192,7 @@ class ThinkGearDecoder {
       if (parsedValues.attention !== undefined ||
           parsedValues.meditation !== undefined ||
           parsedValues.eegBands !== undefined ||
+           parsedValues.rawEEG !== undefined ||
           (parsedValues.poorSignal || 0) > 0) {
         
         const timestamp = new Date().toISOString();
@@ -202,7 +203,7 @@ class ThinkGearDecoder {
         });
 
         if (this.debugMode) {
-          console.log('✅ PACKET ACCEPTED:', JSON.stringify(parsedValues, null, 2));
+          console.log(' PACKET ACCEPTED:', JSON.stringify(parsedValues, null, 2));
         }
       } else {
         if (this.debugMode) {
@@ -234,9 +235,9 @@ class ThinkGearDecoder {
   enableDebug(enabled = true) {
     this.debugMode = enabled;
     if (enabled) {
-      console.log('🐛 Debug mode ENABLED - detailed packet parsing info will be shown');
+      console.log(' Debug mode ENABLED - detailed packet parsing info will be shown');
     } else {
-      console.log('🐛 Debug mode DISABLED');
+      console.log(' Debug mode DISABLED');
     }
   }
 }

@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import LandscapeChartViewer from './LandscapeChartViewer';
+import PSDChart from './PSDChart';
+
 
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 40;
@@ -17,12 +19,15 @@ const BANDS_CONFIG = [
   { key: 'GammaHigh', color: '#E91E63', freq: '40-50 Hz' },
 ];
 
-export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'AlphaLow' }) {
+export default function EEGChart({ bandData, rawBuffer, psdData,isLandscape = false, 
+  screenWidth, 
+  screenHeight,initialSelectedBand = 'AlphaLow' }) {
   const [selectedBand, setSelectedBand] = useState(initialSelectedBand);
   const [showLandscape, setShowLandscape] = useState(false);
 
   const bandSelectorRef = React.useRef(null);
-
+ const chartWidth = screenWidth ? screenWidth - 40 : width - 40;
+  const chartHeight = isLandscape ? 200 : 180; 
   useEffect(() => {
     if (initialSelectedBand) {
       setSelectedBand(initialSelectedBand);
@@ -81,17 +86,7 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <Modal
-        visible={showLandscape}
-        animationType="slide"
-        onRequestClose={() => setShowLandscape(false)}
-      >
-        <LandscapeChartViewer
-          bandData={displayData.bands}
-          initialBand={selectedBand}
-          onClose={() => setShowLandscape(false)}
-        />
-      </Modal>
+      
 
       <View style={styles.alphaContainer}>
         <Text style={styles.alphaTitle}>🧠 Alpha Wave Power</Text>
@@ -112,6 +107,9 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
            '💭 Building up...'}
         </Text>
       </View>
+ <View style={styles.section}>
+        <PSDChart psdData={psdData} chartWidth={chartWidth} />
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>📊 EEG Band Spectrum</Text>
@@ -126,12 +124,7 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>📈 Band Time Series</Text>
-          <TouchableOpacity
-            style={styles.fullscreenButton}
-            onPress={() => setShowLandscape(true)}
-          >
-            <Text style={styles.fullscreenButtonText}>⛶ Landscape View</Text>
-          </TouchableOpacity>
+          
         </View>
         
         <ScrollView 
@@ -173,6 +166,8 @@ export default function EEGChart({ bandData, rawBuffer, initialSelectedBand = 'A
           data={displayData.bands[selectedBand] || []}
           color={BANDS_CONFIG.find(b => b.key === selectedBand)?.color || '#666'}
           label={selectedBand}
+          chartWidth={chartWidth}
+          chartHeight={chartHeight}
         />
       </View>
 

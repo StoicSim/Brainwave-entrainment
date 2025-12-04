@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { Alert } from 'react-native';
 import { scanAndConnect, connectAndMonitor, disconnectDevice } from '../services/BleService';
 import { BLE_CONFIG } from '../constants/BleConfig';
+import EEGProcessor from '../utils/EEGProcessor';
 
 const BleContext = createContext();
 
@@ -31,6 +32,14 @@ export const BleProvider = ({ children }) => {
   
   const [rawEEGBuffer, setRawEEGBuffer] = useState([]);
   
+  // NEW: PSD data state
+  const [psdData, setPsdData] = useState({
+    frequencies: [],
+    psd: [],
+    bandPowers: {},
+    iaf: { frequency: 10, power: 0 },
+  });
+  
   const [metrics, setMetrics] = useState({
     attention: 0,
     meditation: 0,
@@ -39,6 +48,9 @@ export const BleProvider = ({ children }) => {
 
   const dataCountRef = useRef(0);
   const lastUpdateRef = useRef(Date.now());
+  
+  // NEW: Initialize EEG Processor
+  const eegProcessorRef = useRef(new EEGProcessor(512, 512)); // 512 Hz, 1 second window
 
   useEffect(() => {
     return () => {
@@ -52,6 +64,7 @@ export const BleProvider = ({ children }) => {
     dataCountRef.current += 1;
     const now = Date.now();
 
+    // Handle band power data from device
     if (parsedData.eegBands) {
       setBandData(prev => {
         const updated = { ...prev };
@@ -63,11 +76,30 @@ export const BleProvider = ({ children }) => {
       });
     }
 
+    // Handle raw EEG data
     if (parsedData.rawEEG !== undefined) {
       setRawEEGBuffer(prev => {
         const newBuffer = [...prev, parsedData.rawEEG];
         return newBuffer.slice(-1000);
       });
+      
+      // NEW: Process raw EEG through FFT
+      const psdResult = eegProcessorRef.current.addSample(parsedData.rawEEG);
+      
+      if (psdResult) {
+        // Calculate IAF
+        const iaf = eegProcessorRef.current.findIAF(
+          psdResult.frequencies, 
+          psdResult.psd
+        );
+        
+        setPsdData({
+          frequencies: psdResult.frequencies,
+          psd: psdResult.psd,
+          bandPowers: psdResult.bandPowers,
+          iaf: iaf,
+        });
+      }
     }
 
     setMetrics(prev => ({
@@ -123,8 +155,17 @@ export const BleProvider = ({ children }) => {
         GammaHigh: [],
       });
       setRawEEGBuffer([]);
+      setPsdData({
+        frequencies: [],
+        psd: [],
+        bandPowers: {},
+        iaf: { frequency: 10, power: 0 },
+      });
       setMetrics({ attention: 0, meditation: 0, poorSignal: 200 });
       dataCountRef.current = 0;
+      
+      
+      eegProcessorRef.current.reset();
     }
   };
 
@@ -145,6 +186,7 @@ export const BleProvider = ({ children }) => {
     isConnecting,
     bandData,
     rawEEGBuffer,
+    psdData,
     metrics,
     dataCountRef,
     handleConnect,
