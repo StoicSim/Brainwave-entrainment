@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { useBleContext } from '../context/BleContext';
 
 export default function MonitorScreen() {
@@ -15,134 +15,161 @@ export default function MonitorScreen() {
     getStatusColor,
   } = useBleContext();
 
+  const lastTap = useRef(null);
+
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300; // milliseconds
+
+    if (lastTap.current && (now - lastTap.current) < DOUBLE_TAP_DELAY) {
+      // Double tap detected
+      if (global.toggleTabBarUI) {
+        global.toggleTabBarUI();
+      }
+      lastTap.current = null;
+    } else {
+      lastTap.current = now;
+    }
+  };
+
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>EEG Monitor</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
-          <View style={styles.statusDot} />
-          <Text style={styles.statusText}>{status.split(' - ')[0]}</Text>
+    <TouchableWithoutFeedback onPress={handleDoubleTap}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>EEG Monitor</Text>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>{status.split(' - ')[0]}</Text>
+          </View>
         </View>
+
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableWithoutFeedback onPress={handleDoubleTap}>
+            <View>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Device Connection</Text>
+                <View style={styles.controls}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.connectButton, (isConnecting || device !== null) && styles.buttonDisabled]}
+                    onPress={handleConnect}
+                    disabled={isConnecting || device !== null}
+                  >
+                    <Text style={styles.buttonText}>
+                      {device ? '✓ Connected' : 'Connect to Device'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.button, styles.disconnectButton, !device && styles.buttonDisabled]}
+                    onPress={handleDisconnect}
+                    disabled={!device}
+                  >
+                    <Text style={styles.buttonText}>Disconnect</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {!device ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyIcon}>🔌</Text>
+                  <Text style={styles.emptyTitle}>No Device Connected</Text>
+                  <Text style={styles.emptyText}>
+                    Connect your EEG headset to start monitoring your brainwaves
+                  </Text>
+                  <Text style={styles.emptySubtext}>Double-tap anywhere to toggle UI</Text>
+                </View>
+              ) : (
+                <>
+                  {metrics.poorSignal > 50 && (
+                    <View style={styles.warningBanner}>
+                      <Text style={styles.warningIcon}>⚠️</Text>
+                      <View style={styles.warningTextContainer}>
+                        <Text style={styles.warningTitle}>Poor Signal Quality</Text>
+                        <Text style={styles.warningText}>
+                          {metrics.poorSignal === 200 
+                            ? 'No sensor contact - Adjust headset placement'
+                            : 'Weak signal - Ensure sensors touch skin firmly'}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Real-time Metrics</Text>
+                    <View style={styles.metricsGrid}>
+                      <View style={styles.metricCard}>
+                        <Text style={styles.metricIcon}>📡</Text>
+                        <Text style={styles.metricLabel}>Signal Quality</Text>
+                        <Text style={[
+                          styles.metricValue,
+                          { color: metrics.poorSignal < 50 ? '#4CAF50' : '#F44336' }
+                        ]}>
+                          {metrics.poorSignal < 50 ? 'Good' : metrics.poorSignal < 100 ? 'Fair' : 'Poor'}
+                        </Text>
+                        <Text style={styles.metricSubtext}>({metrics.poorSignal}/200)</Text>
+                      </View>
+
+                      <View style={[styles.metricCard, metrics.poorSignal > 50 && styles.metricCardDisabled]}>
+                        <Text style={styles.metricIcon}>🎯</Text>
+                        <Text style={styles.metricLabel}>Attention</Text>
+                        <Text style={[styles.metricValue, metrics.poorSignal > 50 && styles.metricDisabled]}>
+                          {metrics.attention}
+                        </Text>
+                        <Text style={styles.metricSubtext}>
+                          {metrics.poorSignal > 50 ? 'Need good signal' : 'eSense'}
+                        </Text>
+                      </View>
+
+                      <View style={[styles.metricCard, metrics.poorSignal > 50 && styles.metricCardDisabled]}>
+                        <Text style={styles.metricIcon}>🧘</Text>
+                        <Text style={styles.metricLabel}>Meditation</Text>
+                        <Text style={[styles.metricValue, metrics.poorSignal > 50 && styles.metricDisabled]}>
+                          {metrics.meditation}
+                        </Text>
+                        <Text style={styles.metricSubtext}>
+                          {metrics.poorSignal > 50 ? 'Need good signal' : 'eSense'}
+                        </Text>
+                      </View>
+
+                      <View style={styles.metricCard}>
+                        <Text style={styles.metricIcon}>📊</Text>
+                        <Text style={styles.metricLabel}>Data Points</Text>
+                        <Text style={styles.metricValue}>{dataCountRef.current}</Text>
+                        <Text style={styles.metricSubtext}>
+                          {hasBandData() ? '✓ Bands' : 'Raw only'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Session Info</Text>
+                    <View style={styles.infoCard}>
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Status:</Text>
+                        <Text style={[styles.infoValue, { color: getStatusColor() }]}>{status}</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Packets Received:</Text>
+                        <Text style={styles.infoValue}>{dataCountRef.current}</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Band Data:</Text>
+                        <Text style={styles.infoValue}>{hasBandData() ? 'Available' : 'Not yet'}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+          </TouchableWithoutFeedback>
+        </ScrollView>
       </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Device Connection</Text>
-          <View style={styles.controls}>
-            <TouchableOpacity
-              style={[styles.button, styles.connectButton, (isConnecting || device !== null) && styles.buttonDisabled]}
-              onPress={handleConnect}
-              disabled={isConnecting || device !== null}
-            >
-              <Text style={styles.buttonText}>
-                {device ? '✓ Connected' : 'Connect to Device'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, styles.disconnectButton, !device && styles.buttonDisabled]}
-              onPress={handleDisconnect}
-              disabled={!device}
-            >
-              <Text style={styles.buttonText}>Disconnect</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {!device ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🔌</Text>
-            <Text style={styles.emptyTitle}>No Device Connected</Text>
-            <Text style={styles.emptyText}>
-              Connect your EEG headset to start monitoring your brainwaves
-            </Text>
-          </View>
-        ) : (
-          <>
-            {metrics.poorSignal > 50 && (
-              <View style={styles.warningBanner}>
-                <Text style={styles.warningIcon}>⚠️</Text>
-                <View style={styles.warningTextContainer}>
-                  <Text style={styles.warningTitle}>Poor Signal Quality</Text>
-                  <Text style={styles.warningText}>
-                    {metrics.poorSignal === 200 
-                      ? 'No sensor contact - Adjust headset placement'
-                      : 'Weak signal - Ensure sensors touch skin firmly'}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Real-time Metrics</Text>
-              <View style={styles.metricsGrid}>
-                <View style={styles.metricCard}>
-                  <Text style={styles.metricIcon}>📡</Text>
-                  <Text style={styles.metricLabel}>Signal Quality</Text>
-                  <Text style={[
-                    styles.metricValue,
-                    { color: metrics.poorSignal < 50 ? '#4CAF50' : '#F44336' }
-                  ]}>
-                    {metrics.poorSignal < 50 ? 'Good' : metrics.poorSignal < 100 ? 'Fair' : 'Poor'}
-                  </Text>
-                  <Text style={styles.metricSubtext}>({metrics.poorSignal}/200)</Text>
-                </View>
-
-                <View style={[styles.metricCard, metrics.poorSignal > 50 && styles.metricCardDisabled]}>
-                  <Text style={styles.metricIcon}>🎯</Text>
-                  <Text style={styles.metricLabel}>Attention</Text>
-                  <Text style={[styles.metricValue, metrics.poorSignal > 50 && styles.metricDisabled]}>
-                    {metrics.attention}
-                  </Text>
-                  <Text style={styles.metricSubtext}>
-                    {metrics.poorSignal > 50 ? 'Need good signal' : 'eSense'}
-                  </Text>
-                </View>
-
-                <View style={[styles.metricCard, metrics.poorSignal > 50 && styles.metricCardDisabled]}>
-                  <Text style={styles.metricIcon}>🧘</Text>
-                  <Text style={styles.metricLabel}>Meditation</Text>
-                  <Text style={[styles.metricValue, metrics.poorSignal > 50 && styles.metricDisabled]}>
-                    {metrics.meditation}
-                  </Text>
-                  <Text style={styles.metricSubtext}>
-                    {metrics.poorSignal > 50 ? 'Need good signal' : 'eSense'}
-                  </Text>
-                </View>
-
-                <View style={styles.metricCard}>
-                  <Text style={styles.metricIcon}>📊</Text>
-                  <Text style={styles.metricLabel}>Data Points</Text>
-                  <Text style={styles.metricValue}>{dataCountRef.current}</Text>
-                  <Text style={styles.metricSubtext}>
-                    {hasBandData() ? '✓ Bands' : 'Raw only'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Session Info</Text>
-              <View style={styles.infoCard}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Status:</Text>
-                  <Text style={[styles.infoValue, { color: getStatusColor() }]}>{status}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Packets Received:</Text>
-                  <Text style={styles.infoValue}>{dataCountRef.current}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Band Data:</Text>
-                  <Text style={styles.infoValue}>{hasBandData() ? 'Available' : 'Not yet'}</Text>
-                </View>
-              </View>
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -245,6 +272,13 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  emptySubtext: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 10,
+    fontStyle: 'italic',
   },
   warningBanner: {
     backgroundColor: '#FFF3E0',

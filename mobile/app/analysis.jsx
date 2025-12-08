@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, TouchableWithoutFeedback, ScrollView, StyleSheet } from 'react-native';
 import { useBleContext } from '../context/BleContext';
 
 export default function AnalysisScreen() {
@@ -9,6 +9,8 @@ export default function AnalysisScreen() {
     rawEEGBuffer,
     metrics,
   } = useBleContext();
+
+  const lastTap = useRef(null);
 
   const bands = [
     { key: 'Delta', color: '#9C27B0', freq: '0.5-4 Hz', desc: 'Deep sleep' },
@@ -21,122 +23,146 @@ export default function AnalysisScreen() {
     { key: 'GammaHigh', color: '#E91E63', freq: '40-50 Hz', desc: 'Cognitive peak' },
   ];
 
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300; // milliseconds
+
+    if (lastTap.current && (now - lastTap.current) < DOUBLE_TAP_DELAY) {
+      // Double tap detected
+      if (global.toggleTabBarUI) {
+        global.toggleTabBarUI();
+      }
+      lastTap.current = null;
+    } else {
+      lastTap.current = now;
+    }
+  };
+
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Deep Analysis</Text>
-        <Text style={styles.headerSubtitle}>Detailed Session Insights</Text>
-      </View>
+    <TouchableWithoutFeedback onPress={handleDoubleTap}>
+      <View style={styles.container}>
+        {/* Header */}
+        <TouchableWithoutFeedback>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Deep Analysis</Text>
+            <Text style={styles.headerSubtitle}>Detailed Session Insights</Text>
+           
+          </View>
+        </TouchableWithoutFeedback>
 
-      {!device ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🔬</Text>
-          <Text style={styles.emptyTitle}>No Data Available</Text>
-          <Text style={styles.emptyText}>
-            Connect your device in the Monitor tab to see detailed analysis
-          </Text>
-        </View>
-      ) : (
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>EEG Band Analysis</Text>
-            
-            {bands.map((band) => {
-              const values = bandData[band.key];
-              if (!values || values.length === 0) return null;
-
-              const currentValue = values[values.length - 1];
-              const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
-
-              return (
-                <View 
-                  key={band.key} 
-                  style={[
-                    styles.analysisCard,
-                    band.highlight && styles.analysisCardHighlight
-                  ]}
-                >
-                  <View style={styles.analysisHeader}>
-                    <View style={styles.analysisHeaderLeft}>
-                      <View style={[styles.colorDot, { backgroundColor: band.color }]} />
-                      <View>
-                        <Text style={styles.analysisBandName}>
-                          {band.highlight ? '⭐ ' : ''}{band.key}
-                        </Text>
-                        <Text style={styles.analysisFreq}>{band.freq}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.analysisDesc}>{band.desc}</Text>
-                  </View>
+        {!device ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>🔬</Text>
+            <Text style={styles.emptyTitle}>No Data Available</Text>
+            <Text style={styles.emptyText}>
+              Connect your device in the Monitor tab to see detailed analysis
+            </Text>
+          </View>
+        ) : (
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            <TouchableWithoutFeedback onPress={handleDoubleTap}>
+              <View>
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>EEG Band Analysis</Text>
                   
-                  <View style={styles.analysisStats}>
-                    <View style={styles.analysisStat}>
-                      <Text style={styles.analysisStatLabel}>Current</Text>
-                      <Text style={styles.analysisStatValue}>
-                        {Math.round(currentValue).toLocaleString()}
+                  {bands.map((band) => {
+                    const values = bandData[band.key];
+                    if (!values || values.length === 0) return null;
+
+                    const currentValue = values[values.length - 1];
+                    const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
+
+                    return (
+                      <View 
+                        key={band.key} 
+                        style={[
+                          styles.analysisCard,
+                          band.highlight && styles.analysisCardHighlight
+                        ]}
+                      >
+                        <View style={styles.analysisHeader}>
+                          <View style={styles.analysisHeaderLeft}>
+                            <View style={[styles.colorDot, { backgroundColor: band.color }]} />
+                            <View>
+                              <Text style={styles.analysisBandName}>
+                                {band.highlight ? '⭐ ' : ''}{band.key}
+                              </Text>
+                              <Text style={styles.analysisFreq}>{band.freq}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.analysisDesc}>{band.desc}</Text>
+                        </View>
+                        
+                        <View style={styles.analysisStats}>
+                          <View style={styles.analysisStat}>
+                            <Text style={styles.analysisStatLabel}>Current</Text>
+                            <Text style={styles.analysisStatValue}>
+                              {Math.round(currentValue).toLocaleString()}
+                            </Text>
+                          </View>
+                          <View style={styles.analysisStat}>
+                            <Text style={styles.analysisStatLabel}>Average</Text>
+                            <Text style={styles.analysisStatValue}>
+                              {Math.round(avgValue).toLocaleString()}
+                            </Text>
+                          </View>
+                          <View style={styles.analysisStat}>
+                            <Text style={styles.analysisStatLabel}>Samples</Text>
+                            <Text style={styles.analysisStatValue}>{values.length}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Raw EEG Data</Text>
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Total Samples:</Text>
+                      <Text style={styles.infoValue}>{rawEEGBuffer.length}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Latest Value:</Text>
+                      <Text style={styles.infoValue}>
+                        {rawEEGBuffer.length > 0 ? rawEEGBuffer[rawEEGBuffer.length - 1] : 'N/A'}
                       </Text>
                     </View>
-                    <View style={styles.analysisStat}>
-                      <Text style={styles.analysisStatLabel}>Average</Text>
-                      <Text style={styles.analysisStatValue}>
-                        {Math.round(avgValue).toLocaleString()}
-                      </Text>
-                    </View>
-                    <View style={styles.analysisStat}>
-                      <Text style={styles.analysisStatLabel}>Samples</Text>
-                      <Text style={styles.analysisStatValue}>{values.length}</Text>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Sample Rate:</Text>
+                      <Text style={styles.infoValue}>512 Hz</Text>
                     </View>
                   </View>
                 </View>
-              );
-            })}
-          </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Raw EEG Data</Text>
-            <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Total Samples:</Text>
-                <Text style={styles.infoValue}>{rawEEGBuffer.length}</Text>
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Session Summary</Text>
+                  <View style={styles.summaryCard}>
+                    <Text style={styles.summaryText}>
+                      Signal quality is {metrics.poorSignal < 50 ? 'good' : 'poor'}.
+                    </Text>
+                    {metrics.poorSignal < 50 && (
+                      <>
+                        <Text style={styles.summaryText}>
+                          Your attention level is at {metrics.attention}/100.
+                        </Text>
+                        <Text style={styles.summaryText}>
+                          Your meditation level is at {metrics.meditation}/100.
+                        </Text>
+                      </>
+                    )}
+                    <Text style={styles.summaryText}>
+                      Recording {Object.values(bandData).filter(arr => arr.length > 0).length}/8 frequency bands.
+                    </Text>
+                  </View>
+                </View>
               </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Latest Value:</Text>
-                <Text style={styles.infoValue}>
-                  {rawEEGBuffer.length > 0 ? rawEEGBuffer[rawEEGBuffer.length - 1] : 'N/A'}
-                </Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Sample Rate:</Text>
-                <Text style={styles.infoValue}>512 Hz</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Session Summary</Text>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryText}>
-                Signal quality is {metrics.poorSignal < 50 ? 'good' : 'poor'}.
-              </Text>
-              {metrics.poorSignal < 50 && (
-                <>
-                  <Text style={styles.summaryText}>
-                    Your attention level is at {metrics.attention}/100.
-                  </Text>
-                  <Text style={styles.summaryText}>
-                    Your meditation level is at {metrics.meditation}/100.
-                  </Text>
-                </>
-              )}
-              <Text style={styles.summaryText}>
-                Recording {Object.values(bandData).filter(arr => arr.length > 0).length}/8 frequency bands.
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-      )}
-    </View>
+            </TouchableWithoutFeedback>
+          </ScrollView>
+        )}
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -162,6 +188,11 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 14,
     color: '#666',
+  },
+  headerHint: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 5,
   },
   content: {
     flex: 1,

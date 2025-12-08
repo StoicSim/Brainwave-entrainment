@@ -1,20 +1,73 @@
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import React from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Animated } from 'react-native';
+import React, { useRef, useEffect } from 'react';
 import { Slot, useRouter, usePathname } from 'expo-router';
 import { BleProvider } from '../context/BleContext';
 
 function LayoutContent() {
   const router = useRouter();
   const pathname = usePathname();
+  const tabBarAnim = useRef(new Animated.Value(0)).current;
+  const isUIVisible = useRef(true);
 
   const showTabBar = pathname === '/monitor' || pathname === '/charts' || pathname === '/analysis';
+
+  // Reset UI visibility when pathname changes
+  useEffect(() => {
+    if (showTabBar && !isUIVisible.current) {
+      isUIVisible.current = true;
+      
+      Animated.timing(tabBarAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+
+      // Notify child screens about UI reset
+      if (global.onUIToggle) {
+        global.onUIToggle(true);
+      }
+    }
+  }, [pathname]);
+
+  // Function to toggle UI visibility (called from child screens)
+  const toggleUI = () => {
+    isUIVisible.current = !isUIVisible.current;
+    
+    Animated.timing(tabBarAnim, {
+      toValue: isUIVisible.current ? 0 : 100,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+
+    // Notify child screens about UI toggle
+    if (global.onUIToggle) {
+      global.onUIToggle(isUIVisible.current);
+    }
+  };
+
+  // Expose toggle function globally so child screens can call it
+  useEffect(() => {
+    global.toggleTabBarUI = toggleUI;
+    global.isUIVisible = isUIVisible;
+    return () => {
+      delete global.toggleTabBarUI;
+      delete global.isUIVisible;
+    };
+  }, []);
 
   return (
     <View style={styles.container}>
       <Slot />
       
       {showTabBar && (
-        <View style={styles.tabBar}>
+        <Animated.View 
+          style={[
+            styles.tabBar,
+            {
+              transform: [{ translateY: tabBarAnim }]
+            }
+          ]}
+        >
           <TouchableOpacity 
             style={[styles.tabButton, pathname === '/monitor' && styles.tabButtonActive]}
             onPress={() => router.push('/monitor')}
@@ -44,7 +97,7 @@ function LayoutContent() {
               Analysis
             </Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -63,6 +116,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderTopWidth: 1,

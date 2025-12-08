@@ -279,7 +279,7 @@ function BandSpectrum({ bandData, bands, selectedBand, onBandSelect }) {
               />
             </View>
             {selectedBand === band.key && (
-              <Text style={styles.spectrumSelected}>👆</Text>
+              <Text style={styles.spectrumSelected}></Text>
             )}
             <Text style={styles.spectrumLabel} numberOfLines={1}>
               {band.key.replace('AlphaLow', 'α↓')

@@ -1,13 +1,23 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
   const router = useRouter();
 
+  const handleBackgroundPress = () => {
+    if (global.toggleTabBarUI) {
+      global.toggleTabBarUI();
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        onTouchEnd={handleBackgroundPress}
+      >
         <Text style={styles.title}>Brain Entrainment App</Text>
         <Text style={styles.subtitle}>Alpha Wave Focus & Relaxation</Text>
         
@@ -32,7 +42,7 @@ export default function HomeScreen() {
         >
           <Text style={styles.secondaryButtonText}>About</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Connect your mind to the waves</Text>
@@ -49,11 +59,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  content: {
     padding: 20,
     paddingTop: 60,
     justifyContent: 'center',
+    flexGrow: 1,
   },
   title: {
     fontSize: 32,

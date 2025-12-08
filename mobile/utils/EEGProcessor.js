@@ -39,6 +39,38 @@ class EEGProcessor {
   }
 
   /**
+   * Simple notch filter to remove line noise (50 or 60 Hz)
+   * ADD THIS NEW METHOD
+   */
+  notchFilter(signal, notchFreq = 50, sampleRate = 512, bandwidth = 2) {
+    // Simple moving average notch filter
+    const filtered = [...signal];
+    const period = Math.round(sampleRate / notchFreq);
+    
+    for (let i = period; i < signal.length; i++) {
+      // Subtract the periodic component
+      filtered[i] = signal[i] - signal[i - period];
+    }
+    
+    return filtered;
+  }
+
+  /**
+   * Simple bandpass filter
+   * ADD THIS NEW METHOD
+   */
+  bandpassFilter(signal, lowFreq = 0.5, highFreq = 50) {
+    // This is a simplified version - consider using a proper filter library
+    let processed = this.detrend(signal);
+    
+    // High-pass: remove very low frequencies
+    const mean = processed.reduce((a, b) => a + b, 0) / processed.length;
+    processed = processed.map(x => x - mean);
+    
+    return processed;
+  }
+
+  /**
    * Apply Hamming window to reduce spectral leakage
    */
   applyHammingWindow(signal) {
@@ -51,13 +83,21 @@ class EEGProcessor {
 
   /**
    * Compute Power Spectral Density
+   * UPDATE THIS METHOD
    */
   computePSD(signal) {
+      console.log('Input signal range:', Math.min(...signal), 'to', Math.max(...signal));
+
     const N = signal.length;
     
-    // Preprocess signal
+    // Preprocess signal with filters
     let processed = this.detrend(signal);
+      console.log('After detrend:', Math.min(...processed), 'to', Math.max(...processed));
+
+    processed = this.notchFilter(processed, 50, this.sampleRate); // Remove 50Hz line noise
     processed = this.applyHammingWindow(processed);
+      console.log('After window:', Math.min(...processed), 'to', Math.max(...processed));
+
     
     // Prepare input for FFT (real + imaginary parts)
     const input = new Array(N * 2);
@@ -79,8 +119,8 @@ class EEGProcessor {
       const real = output[i * 2];
       const imag = output[i * 2 + 1];
       
-      // Power = (real² + imag²) / N
-      const power = (real * real + imag * imag) / N;
+      // Power = (real² + imag²) / N² for proper scaling
+      const power = (real * real + imag * imag) / (N * N);
       
       psd.push(power);
       frequencies.push(i * this.sampleRate / N);
