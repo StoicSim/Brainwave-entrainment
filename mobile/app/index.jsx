@@ -1,22 +1,92 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useUserProfile } from '../context/UserProfileContext';
+import UserProfileModal from '../components/UserProfileModal';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { userProfile, updateProfile, isSetupComplete } = useUserProfile();
+  const [checklistExpanded, setChecklistExpanded] = useState(true);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
 
-  const handleBackgroundPress = () => {
-    if (global.toggleTabBarUI) {
-      global.toggleTabBarUI();
+  const handlePersonalityTest = () => {
+    // Navigate to personality test screen or show modal
+    // For now, simulate completion
+    Alert.alert(
+      'Personality Test',
+      'This would navigate to a full personality assessment. For demo, marking as complete.',
+      [
+        {
+          text: 'Complete Test',
+          onPress: () => {
+            updateProfile({
+              personalityTest: {
+                completed: true,
+                timestamp: new Date().toISOString(),
+                scores: {
+                  openness: 75,
+                  conscientiousness: 82,
+                  extraversion: 68,
+                  agreeableness: 79,
+                  neuroticism: 45
+                }
+              }
+            });
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const handleIAFCalibration = () => {
+    // Navigate to IAF calibration screen
+    Alert.alert(
+      'IAF Calibration',
+      'This would start a 2-minute brainwave scan to determine your Individual Alpha Frequency. For demo, marking as complete.',
+      [
+        {
+          text: 'Start Calibration',
+          onPress: () => {
+            updateProfile({
+              iafCalibration: {
+                completed: true,
+                timestamp: new Date().toISOString(),
+                iaf: 10.2
+              }
+            });
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const handleStartMonitoring = () => {
+    if (!isSetupComplete()) {
+      Alert.alert(
+        'Setup Incomplete',
+        'Please complete all setup steps before starting monitoring.'
+      );
+      return;
     }
+    router.push('/monitor');
   };
 
   return (
     <View style={styles.container}>
+      {/* User Profile Icon */}
+      <TouchableOpacity 
+        style={styles.userIconButton}
+        onPress={() => setProfileModalVisible(true)}
+      >
+        <Text style={styles.userIcon}>👤</Text>
+      </TouchableOpacity>
+
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.content}
-        onTouchEnd={handleBackgroundPress}
       >
         <Text style={styles.title}>Brain Entrainment App</Text>
         <Text style={styles.subtitle}>Alpha Wave Focus & Relaxation</Text>
@@ -29,18 +99,100 @@ export default function HomeScreen() {
           </Text>
         </View>
 
+        {/* Setup Checklist */}
+        <View style={styles.checklistCard}>
+          <TouchableOpacity 
+            style={styles.checklistHeader}
+            onPress={() => setChecklistExpanded(!checklistExpanded)}
+          >
+            <Text style={styles.checklistTitle}>
+              {isSetupComplete() ? '✅' : '⚙️'} Personal Mode Setup
+            </Text>
+            <Text style={styles.expandIcon}>{checklistExpanded ? '▼' : '▶'}</Text>
+          </TouchableOpacity>
+
+          {checklistExpanded && (
+            <View style={styles.checklistBody}>
+              {/* Basic Info */}
+              <View style={styles.checklistItem}>
+                <View style={styles.checklistItemHeader}>
+                  <Text style={styles.checklistIcon}>
+                    {userProfile.name && userProfile.age && userProfile.gender ? '✅' : '⭕'}
+                  </Text>
+                  <Text style={styles.checklistItemTitle}>Basic Information</Text>
+                </View>
+                <Text style={styles.checklistItemDesc}>
+                  {userProfile.name && userProfile.age && userProfile.gender
+                    ? `${userProfile.name}, ${userProfile.age}, ${userProfile.gender}`
+                    : 'Complete your profile (tap 👤 icon above)'}
+                </Text>
+              </View>
+
+              {/* Personality Test */}
+              <View style={styles.checklistItem}>
+                <View style={styles.checklistItemHeader}>
+                  <Text style={styles.checklistIcon}>
+                    {userProfile.personalityTest.completed ? '✅' : '⭕'}
+                  </Text>
+                  <Text style={styles.checklistItemTitle}>Step 1: Personality Test</Text>
+                </View>
+                <Text style={styles.checklistItemDesc}>15 min assessment</Text>
+                {!userProfile.personalityTest.completed && (
+                  <TouchableOpacity 
+                    style={styles.checklistButton}
+                    onPress={handlePersonalityTest}
+                  >
+                    <Text style={styles.checklistButtonText}>Start Test</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* IAF Calibration */}
+              <View style={styles.checklistItem}>
+                <View style={styles.checklistItemHeader}>
+                  <Text style={styles.checklistIcon}>
+                    {userProfile.iafCalibration.completed ? '✅' : '⭕'}
+                  </Text>
+                  <Text style={styles.checklistItemTitle}>Step 2: IAF Calibration</Text>
+                </View>
+                <Text style={styles.checklistItemDesc}>2 min brainwave scan</Text>
+                {!userProfile.iafCalibration.completed && (
+                  <TouchableOpacity 
+                    style={styles.checklistButton}
+                    onPress={handleIAFCalibration}
+                  >
+                    <Text style={styles.checklistButtonText}>Start Calibration</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Main Action Button */}
         <TouchableOpacity 
-          style={styles.primaryButton}
-          onPress={() => router.push('/monitor')}
+          style={[
+            styles.primaryButton,
+            !isSetupComplete() && styles.primaryButtonDisabled
+          ]}
+          onPress={handleStartMonitoring}
         >
-          <Text style={styles.buttonText}>Start Monitoring</Text>
+          <Text style={styles.buttonText}>
+            {isSetupComplete() ? 'Start Monitoring' : 'Complete Setup First'}
+          </Text>
         </TouchableOpacity>
+
+        {!isSetupComplete() && (
+          <Text style={styles.warningText}>
+            ⚠️ Complete all setup steps to unlock monitoring
+          </Text>
+        )}
 
         <TouchableOpacity 
           style={styles.secondaryButton}
           onPress={() => router.push('/about')}
         >
-          <Text style={styles.secondaryButtonText}>About</Text>
+          <Text style={styles.secondaryButtonText}>Data Collection Info</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -50,100 +202,119 @@ export default function HomeScreen() {
           Next steps: Cloud storage → AI tone generation
         </Text>
       </View>
+
+      {/* Profile Modal */}
+      <UserProfileModal
+        visible={profileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
+        userProfile={userProfile}
+        updateProfile={updateProfile}
+      />
     </View>
   );
 }
 
+// Add new styles
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 20,
-    paddingTop: 60,
+  // ... existing styles ...
+  
+  userIconButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: '#fff',
     justifyContent: 'center',
-    flexGrow: 1,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 18,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 40,
-  },
-  infoBox: {
-    backgroundColor: '#E8F5E9',
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 40,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 10,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#555',
-    lineHeight: 20,
-  },
-  primaryButton: {
-    backgroundColor: '#4CAF50',
-    padding: 18,
-    borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 15,
-    elevation: 3,
+    zIndex: 100,
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
-  buttonText: {
-    color: '#fff',
+  userIcon: {
+    fontSize: 24,
+  },
+  checklistCard: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    marginBottom: 20,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  checklistHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#2196F3',
+  },
+  checklistTitle: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: '#fff',
   },
-  secondaryButton: {
-    backgroundColor: '#fff',
-    padding: 18,
-    borderRadius: 12,
+  expandIcon: {
+    fontSize: 16,
+    color: '#fff',
+  },
+  checklistBody: {
+    padding: 15,
+  },
+  checklistItem: {
+    marginBottom: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  checklistItemHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#4CAF50',
+    marginBottom: 8,
   },
-  secondaryButtonText: {
-    color: '#4CAF50',
+  checklistIcon: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  checklistItemTitle: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#333',
   },
-  footer: {
-    padding: 20,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
-  footerText: {
-    fontSize: 14,
+  checklistItemDesc: {
+    fontSize: 13,
     color: '#666',
-    textAlign: 'center',
+    marginLeft: 30,
+    marginBottom: 10,
+  },
+  checklistButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginLeft: 30,
+  },
+  checklistButtonText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '600',
   },
-  footerSubtext: {
-    fontSize: 12,
-    color: '#999',
+  primaryButtonDisabled: {
+    backgroundColor: '#ccc',
+    elevation: 0,
+  },
+  warningText: {
+    fontSize: 13,
+    color: '#F44336',
     textAlign: 'center',
-    marginTop: 5,
+    marginBottom: 15,
   },
 });
