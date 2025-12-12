@@ -1,19 +1,8 @@
 import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { useBleContext } from '../context/BleContext';
-import { useUserProfile } from '../context/UserProfileContext';
-export default function MonitorScreen() {const { isSetupComplete } = useUserProfile();
-const router = useRouter();
 
-  useEffect(() => {
-    if (!isSetupComplete()) {
-      Alert.alert(
-        'Setup Required',
-        'Please complete your profile setup first.',
-        [{ text: 'OK', onPress: () => router.push('/') }]
-      );
-    }
-  }, []);
+export default function MonitorScreen() {
   const {
     status,
     device,
