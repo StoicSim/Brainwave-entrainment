@@ -17,18 +17,28 @@ export default function HomeScreen() {
     });
   };
 
+  const handleGoToProfile = () => {
+    // Navigate to profile page to enter actual basic info
+    router.push('/profile');
+  };
+
   const handlePersonalityTest = () => {
+    // Navigate to the actual personality test
+    router.push('/personality-test');
+  };
+
+  const handlePersonalityTestDemo = () => {
     // Instantly complete personality test with demo data
     updateProfile({
       personalityTest: {
         completed: true,
         timestamp: new Date().toISOString(),
         scores: {
-          openness: 75,
+          openmindedness: 75,
           conscientiousness: 82,
           extraversion: 68,
           agreeableness: 79,
-          neuroticism: 45
+          negativeemotionality: 45
         }
       }
     });
@@ -111,12 +121,20 @@ export default function HomeScreen() {
                       <Text style={styles.checklistItemDesc}>
                         Tell us about yourself
                       </Text>
-                      <TouchableOpacity 
-                        style={styles.checklistButton}
-                        onPress={handleCompleteBasicInfo}
-                      >
-                        <Text style={styles.checklistButtonText}>Complete Profile</Text>
-                      </TouchableOpacity>
+                      <View style={styles.buttonRow}>
+                        <TouchableOpacity 
+                          style={[styles.checklistButton, styles.checklistButtonSecondary]}
+                          onPress={handleGoToProfile}
+                        >
+                          <Text style={styles.checklistButtonText}>Enter Info</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.checklistButton}
+                          onPress={handleCompleteBasicInfo}
+                        >
+                          <Text style={styles.checklistButtonText}>Use Demo</Text>
+                        </TouchableOpacity>
+                      </View>
                     </>
                   )}
                 </View>
@@ -136,12 +154,20 @@ export default function HomeScreen() {
                   ) : (
                     <>
                       <Text style={styles.checklistItemDesc}>15 min assessment</Text>
-                      <TouchableOpacity 
-                        style={styles.checklistButton}
-                        onPress={handlePersonalityTest}
-                      >
-                        <Text style={styles.checklistButtonText}>Start Test</Text>
-                      </TouchableOpacity>
+                      <View style={styles.buttonRow}>
+                        <TouchableOpacity 
+                          style={[styles.checklistButton, styles.checklistButtonSecondary]}
+                          onPress={handlePersonalityTest}
+                        >
+                          <Text style={styles.checklistButtonText}>Take Test</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.checklistButton}
+                          onPress={handlePersonalityTestDemo}
+                        >
+                          <Text style={styles.checklistButtonText}>Use Demo</Text>
+                        </TouchableOpacity>
+                      </View>
                     </>
                   )}
                 </View>
@@ -189,7 +215,7 @@ export default function HomeScreen() {
             style={styles.quickActionButton}
             onPress={loadDemoData}
           >
-            <Text style={styles.quickActionText}> Load Demo Data</Text>
+            <Text style={styles.quickActionText}>🎭 Load Demo Data</Text>
           </TouchableOpacity>
           
           {(userProfile.name || userProfile.personalityTest.completed || userProfile.iafCalibration.completed) && (
@@ -210,7 +236,7 @@ export default function HomeScreen() {
                 );
               }}
             >
-              <Text style={styles.quickActionTextDanger}> Reset All</Text>
+              <Text style={styles.quickActionTextDanger}>🗑️ Reset All</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -351,13 +377,20 @@ const styles = StyleSheet.create({
     marginLeft: 30,
     marginBottom: 10,
   },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginLeft: 30,
+  },
   checklistButton: {
     backgroundColor: '#4CAF50',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
     alignSelf: 'flex-start',
-    marginLeft: 30,
+  },
+  checklistButtonSecondary: {
+    backgroundColor: '#2196F3',
   },
   checklistButtonText: {
     color: '#fff',
