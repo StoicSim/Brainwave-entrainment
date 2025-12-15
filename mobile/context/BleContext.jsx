@@ -16,6 +16,8 @@ export const useBleContext = () => {
 
 export const BleProvider = ({ children }) => {
   const [status, setStatus] = useState('Disconnected');
+  const [isPaused, setIsPaused] = useState(false);
+
   const [device, setDevice] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   
@@ -64,6 +66,18 @@ export const BleProvider = ({ children }) => {
     dataCountRef.current += 1;
     const now = Date.now();
 
+    if (isPaused) {
+      // When paused, ONLY update signal quality, nothing else
+      if (parsedData.poorSignal !== undefined) {
+        setMetrics(prev => ({
+          ...prev,
+          poorSignal: parsedData.poorSignal,
+        }));
+      }
+      console.log('⏸️ Data paused - ignoring packet');
+      return; // Exit early - don't process anything else
+    }
+
     // Handle band power data from device
     if (parsedData.eegBands) {
       setBandData(prev => {
@@ -83,7 +97,7 @@ export const BleProvider = ({ children }) => {
         return newBuffer.slice(-1000);
       });
       
-      // NEW: Process raw EEG through FFT
+      // Process raw EEG through FFT
       const psdResult = eegProcessorRef.current.addSample(parsedData.rawEEG);
       
       if (psdResult) {
@@ -103,14 +117,28 @@ export const BleProvider = ({ children }) => {
     }
 
     setMetrics(prev => ({
-      attention: parsedData.attention !== undefined ? parsedData.attention : (parsedData.poorSignal !== undefined ? 0 : prev.attention),
-      meditation: parsedData.meditation !== undefined ? parsedData.meditation : (parsedData.poorSignal !== undefined ? 0 : prev.meditation),
-      poorSignal: parsedData.poorSignal !== undefined ? parsedData.poorSignal : prev.poorSignal,
-    }));
+    attention: parsedData.attention !== undefined ? parsedData.attention : (parsedData.poorSignal !== undefined ? 0 : prev.attention),
+    meditation: parsedData.meditation !== undefined ? parsedData.meditation : (parsedData.poorSignal !== undefined ? 0 : prev.meditation),
+    poorSignal: parsedData.poorSignal !== undefined ? parsedData.poorSignal : prev.poorSignal,
+  }));
 
     if (now - lastUpdateRef.current > 50) {
       lastUpdateRef.current = now;
     }
+  };
+
+  const pauseDataCollection = () => {
+    setIsPaused(true);
+    console.log('📊 Data collection paused (IAF calibration mode)');
+     setTimeout(() => {
+    setRawEEGBuffer([]);
+    console.log('🧹 Cleared rawEEGBuffer during pause');
+  }, 100);
+  };
+
+  const resumeDataCollection = () => {
+    setIsPaused(false);
+    console.log('📊 Data collection resumed');
   };
 
   const handleConnect = async () => {
@@ -164,7 +192,6 @@ export const BleProvider = ({ children }) => {
       setMetrics({ attention: 0, meditation: 0, poorSignal: 200 });
       dataCountRef.current = 0;
       
-      
       eegProcessorRef.current.reset();
     }
   };
@@ -189,8 +216,11 @@ export const BleProvider = ({ children }) => {
     psdData,
     metrics,
     dataCountRef,
+    isPaused,
     handleConnect,
     handleDisconnect,
+    pauseDataCollection,
+    resumeDataCollection,
     getStatusColor,
     hasBandData,
   };

@@ -6,8 +6,8 @@ const UserProfileContext = createContext();
 
 const DEMO_USER = {
   profileComplete: true,
-  name: "Sarah",
-  age: "24",
+  name: "Simran",
+  age: "23",
   gender: "F",
   personalityTest: {
     completed: true,

@@ -43,9 +43,14 @@ export default function HomeScreen() {
       }
     });
   };
+const handleIAFCalibration = () => {
+  router.push('/iaf-calibration');
+};
 
-  const handleIAFCalibration = () => {
-    // Instantly complete IAF calibration with demo data
+
+
+  const handleIAFCalibrationDemo = () => {
+   
     updateProfile({
       iafCalibration: {
         completed: true,
@@ -187,12 +192,20 @@ export default function HomeScreen() {
                   ) : (
                     <>
                       <Text style={styles.checklistItemDesc}>2 min brainwave scan</Text>
+<View style={styles.buttonRow}>
                       <TouchableOpacity 
-                        style={styles.checklistButton}
+                        style={[styles.checklistButton, styles.checklistButtonSecondary]}
                         onPress={handleIAFCalibration}
                       >
                         <Text style={styles.checklistButtonText}>Start Calibration</Text>
                       </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.checklistButton}
+                        onPress={handleIAFCalibrationDemo}
+                      >
+                        <Text style={styles.checklistButtonText}>Use Demo</Text>
+                      </TouchableOpacity>
+                      </View>
                     </>
                   )}
                 </View>
@@ -215,7 +228,7 @@ export default function HomeScreen() {
             style={styles.quickActionButton}
             onPress={loadDemoData}
           >
-            <Text style={styles.quickActionText}>🎭 Load Demo Data</Text>
+            <Text style={styles.quickActionText}> Load Demo Data</Text>
           </TouchableOpacity>
           
           {(userProfile.name || userProfile.personalityTest.completed || userProfile.iafCalibration.completed) && (
@@ -236,7 +249,7 @@ export default function HomeScreen() {
                 );
               }}
             >
-              <Text style={styles.quickActionTextDanger}>🗑️ Reset All</Text>
+              <Text style={styles.quickActionTextDanger}> Reset All</Text>
             </TouchableOpacity>
           )}
         </View>
