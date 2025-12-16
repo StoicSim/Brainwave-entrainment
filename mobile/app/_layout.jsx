@@ -3,7 +3,9 @@ import React, { useRef, useEffect } from 'react';
 import { Slot, useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BleProvider } from '../context/BleContext';
-import { UserProfileProvider, useUserProfile } from '../context/UserProfileContext';
+import { UserProfileProvider } from '../context/UserProfileContext';
+import { ResearchSessionProvider } from '../context/ResearchSessionContext';
+import { EEGDataProvider } from '../context/EEGDataContext'; // ADD THIS
 
 function LayoutContent() {
   const router = useRouter();
@@ -144,9 +146,13 @@ function LayoutContent() {
 export default function RootLayout() {
   return (
     <UserProfileProvider>
-      <BleProvider>
-        <LayoutContent />
-      </BleProvider>
+      <ResearchSessionProvider>
+        <EEGDataProvider> {/* ADD THIS WRAPPER */}
+          <BleProvider>
+            <LayoutContent />
+          </BleProvider>
+        </EEGDataProvider>
+      </ResearchSessionProvider>
     </UserProfileProvider>
   );
 }

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUserProfile } from '../context/UserProfileContext';
+import { useResearchSession } from '../context/ResearchSessionContext';
 
 const BFI2_ITEMS = [
   { id: 1, text: "Is outgoing, sociable.", domain: "Extraversion", facet: "Sociability" },
@@ -69,7 +70,14 @@ const BFI2_ITEMS = [
 
 export default function PersonalityTestScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { updateProfile } = useUserProfile();
+  const { savePersonalityTest, currentSubject } = useResearchSession();
+  
+  // Check if we're in research mode
+  const isResearchMode = params.researchMode === 'true';
+  const subjectId = params.subjectId;
+  
   const [responses, setResponses] = useState({});
   const [currentPage, setCurrentPage] = useState(0);
   const [showResults, setShowResults] = useState(false);
@@ -113,7 +121,16 @@ export default function PersonalityTestScreen() {
       if (scores.length > 0) {
         const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
         // Convert from 1-5 scale to 0-100 scale
-        finalScores[domain.toLowerCase().replace('-', '')] = Math.round(((mean - 1) / 4) * 100);
+        const scaledScore = Math.round(((mean - 1) / 4) * 100);
+        
+        // Map to the correct key names
+        if (domain === 'Open-Mindedness') {
+          finalScores['openmindedness'] = scaledScore;
+        } else if (domain === 'Negative Emotionality') {
+          finalScores['negativeemotionality'] = scaledScore;
+        } else {
+          finalScores[domain.toLowerCase()] = scaledScore;
+        }
       }
     });
 
@@ -136,30 +153,48 @@ export default function PersonalityTestScreen() {
     setShowResults(true);
   };
 
-  const handleSaveAndClose = () => {
-    updateProfile({
-      personalityTest: {
-        completed: true,
-        timestamp: new Date().toISOString(),
-        scores: calculatedScores
-      }
-    });
-
-    setShowResults(false);
-    router.push('/');
+  const handleSaveAndReturn = () => {
+    if (isResearchMode) {
+      // Save to research session
+      savePersonalityTest(calculatedScores);
+      
+      Alert.alert(
+        'Test Complete',
+        `Personality test completed for Subject ${subjectId}`,
+        [{ 
+          text: 'OK',
+          onPress: () => router.push('/research/new-subject')
+        }]
+      );
+    } else {
+      // Save to user profile (personal mode)
+      updateProfile({
+        personalityTest: {
+          completed: true,
+          timestamp: new Date().toISOString(),
+          scores: calculatedScores
+        }
+      });
+      
+      setShowResults(false);
+      router.push('/');
+    }
   };
 
   const handleViewProfile = () => {
-    updateProfile({
-      personalityTest: {
-        completed: true,
-        timestamp: new Date().toISOString(),
-        scores: calculatedScores
-      }
-    });
+    // Only available in personal mode
+    if (!isResearchMode) {
+      updateProfile({
+        personalityTest: {
+          completed: true,
+          timestamp: new Date().toISOString(),
+          scores: calculatedScores
+        }
+      });
 
-    setShowResults(false);
-    router.push('/profile');
+      setShowResults(false);
+      router.push('/profile');
+    }
   };
 
   const getDomainDescription = (domain, score) => {
@@ -179,6 +214,17 @@ export default function PersonalityTestScreen() {
     return '#2196F3';
   };
 
+  const getDomainDisplayName = (domain) => {
+    const names = {
+      openmindedness: 'Open-Mindedness',
+      conscientiousness: 'Conscientiousness',
+      extraversion: 'Extraversion',
+      agreeableness: 'Agreeableness',
+      negativeemotionality: 'Negative Emotionality'
+    };
+    return names[domain] || domain;
+  };
+
   const progress = (Object.keys(responses).length / BFI2_ITEMS.length) * 100;
 
   return (
@@ -190,7 +236,9 @@ export default function PersonalityTestScreen() {
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Personality Test</Text>
-          <Text style={styles.headerSubtitle}>BFI-2 Assessment</Text>
+          <Text style={styles.headerSubtitle}>
+            {isResearchMode ? `Subject ${subjectId}` : 'BFI-2 Assessment'}
+          </Text>
         </View>
         <View style={styles.backButton} />
       </View>
@@ -208,12 +256,16 @@ export default function PersonalityTestScreen() {
               <View style={styles.modalHeader}>
                 <Ionicons name="checkmark-circle" size={64} color="#4CAF50" />
                 <Text style={styles.modalTitle}>Test Complete!</Text>
-                <Text style={styles.modalSubtitle}>Your Big Five Personality Profile</Text>
+                <Text style={styles.modalSubtitle}>
+                  {isResearchMode 
+                    ? `Results for Subject ${subjectId}` 
+                    : 'Your Big Five Personality Profile'}
+                </Text>
               </View>
 
               <View style={styles.resultsContainer}>
                 {calculatedScores && Object.entries(calculatedScores).map(([domain, score]) => {
-                  const domainName = domain.charAt(0).toUpperCase() + domain.slice(1).replace('emotionality', ' Emotionality').replace('mindedness', '-Mindedness');
+                  const domainName = getDomainDisplayName(domain);
                   return (
                     <View key={domain} style={styles.resultItem}>
                       <View style={styles.resultHeader}>
@@ -241,25 +293,31 @@ export default function PersonalityTestScreen() {
 
               <View style={styles.modalFooter}>
                 <Text style={styles.modalFooterText}>
-                  Your results have been calculated based on the Big Five personality model.
-                  These scores reflect your self-reported traits.
+                  Results calculated based on the Big Five personality model.
+                  {isResearchMode 
+                    ? ' Data saved to research session.' 
+                    : ' These scores reflect your self-reported traits.'}
                 </Text>
               </View>
 
               <View style={styles.modalButtons}>
+                {!isResearchMode && (
+                  <TouchableOpacity 
+                    style={[styles.modalButton, styles.modalButtonSecondary]}
+                    onPress={handleViewProfile}
+                  >
+                    <Ionicons name="person" size={20} color="#2196F3" />
+                    <Text style={styles.modalButtonTextSecondary}>View Profile</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity 
-                  style={[styles.modalButton, styles.modalButtonSecondary]}
-                  onPress={handleViewProfile}
-                >
-                  <Ionicons name="person" size={20} color="#2196F3" />
-                  <Text style={styles.modalButtonTextSecondary}>View Profile</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.modalButton}
-                  onPress={handleSaveAndClose}
+                  style={[styles.modalButton, isResearchMode && { flex: 1 }]}
+                  onPress={handleSaveAndReturn}
                 >
                   <Ionicons name="checkmark" size={20} color="#fff" />
-                  <Text style={styles.modalButtonText}>Done</Text>
+                  <Text style={styles.modalButtonText}>
+                    {isResearchMode ? 'Save & Return' : 'Done'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>

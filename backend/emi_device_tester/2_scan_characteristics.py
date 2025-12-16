@@ -1,7 +1,7 @@
 import asyncio
 from bleak import BleakScanner, BleakClient
 
-TARGET_ADDR = "34:81:F4:33:AE:91"
+TARGET_ADDR = "34:81:F4:33:AD:FC:"
 
 async def inspect_services():
     print("Searching for device...")

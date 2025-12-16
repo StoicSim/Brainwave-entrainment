@@ -10,7 +10,7 @@ from matplotlib.animation import FuncAnimation
 import threading
 from scipy.signal import butter, lfilter
 
-DEVICE_ADDRESS = "34:81:F4:33:AE:91"
+DEVICE_ADDRESS = "34:81:F4:33:AD:FC"
 NOTIFY_UUIDS = [
     "49535343-1e4d-4bd9-ba61-23c647249616"
 ]

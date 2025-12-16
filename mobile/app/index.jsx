@@ -276,9 +276,9 @@ const handleIAFCalibration = () => {
 
         <TouchableOpacity 
           style={styles.secondaryButton}
-          onPress={() => router.push('/about')}
+          onPress={() => router.push('/research-mode')}
         >
-          <Text style={styles.secondaryButtonText}>Data Collection Info</Text>
+          <Text style={styles.secondaryButtonText}>Research Data Collection </Text>
         </TouchableOpacity>
       </ScrollView>
 

@@ -4,7 +4,17 @@ import { useRouter } from 'expo-router';
 import { useBleContext } from '../context/BleContext';
 import { useUserProfile } from '../context/UserProfileContext';
 import EEGProcessor from '../utils/EEGProcessor';
+import { useLocalSearchParams } from 'expo-router';
+import { useResearchSession } from '../context/ResearchSessionContext';
 
+const useSafeResearchSession = () => {
+  try {
+    const { useResearchSession } = require('../context/ResearchSessionContext');
+    return useResearchSession();
+  } catch (error) {
+    return null;
+  }
+};
 // CRB Method Implementation for Single Channel
 class CRBCalculator {
   constructor(sampleRate = 512) {
@@ -72,6 +82,8 @@ class CRBCalculator {
 
 export default function IAFCalibrationScreen() {
   const router = useRouter();
+    const params = useLocalSearchParams(); 
+
   const { 
     device, 
     metrics, 
@@ -83,6 +95,9 @@ export default function IAFCalibrationScreen() {
     resumeDataCollection 
   } = useBleContext();
   const { updateProfile } = useUserProfile();
+    const researchSession = useSafeResearchSession(); 
+const isResearchMode = params.researchMode === 'true'; 
+  const subjectId = params.subjectId;
   
   const [phase, setPhase] = useState('intro');
   const [countdown, setCountdown] = useState(0);
@@ -265,49 +280,84 @@ export default function IAFCalibrationScreen() {
     }
   }, [phase]);
 
-  const saveIAF = async () => {
+   const saveIAF = async () => {
     if (iafResult) {
+      if (isResearchMode && researchSession) {
+        // Save to research session
+        researchSession.saveIAFCalibration({
+          iaf: iafResult.frequency
+        });
+        
+        // Disconnect if we connected during calibration
+        if (device && !wasConnectedOnEntryRef.current) {
+          console.log('🔌 Disconnecting device after save');
+          await handleDisconnect();
+        }
+        
+        Alert.alert(
+          'Success!',
+          `IAF calibrated for Subject ${subjectId}:\n\n${iafResult.frequency.toFixed(2)} Hz`,
+          [{ 
+            text: 'OK', 
+            onPress: () => router.push('/research/new-subject')
+          }]
+        );
+      } else {
+        // Personal mode - existing code
+        updateProfile({
+          iafCalibration: {
+            completed: true,
+            timestamp: new Date().toISOString(),
+            iaf: iafResult.frequency,
+            method: 'CRB',
+            desynchronization: iafResult.desynchronization,
+            restSamples: restData.length,
+            taskSamples: taskData.length,
+            power: iafResult.power
+          }
+        });
+        
+        // Disconnect if we connected during calibration
+        if (device && !wasConnectedOnEntryRef.current) {
+          console.log('🔌 Disconnecting device after save');
+          await handleDisconnect();
+        }
+        
+        Alert.alert(
+          'Success!',
+          `Your Individual Alpha Frequency has been calibrated:\n\n${iafResult.frequency.toFixed(2)} Hz\n\nThis will be used to personalize your brain entrainment experience.`,
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      }
+    }
+  };
+
+  // UPDATE the useDemoData function:
+  const useDemoData = () => {
+    if (isResearchMode && researchSession) {
+      researchSession.saveIAFCalibration({
+        iaf: 10.2
+      });
+      Alert.alert(
+        'Demo Data Loaded',
+        `IAF set to 10.2 Hz for Subject ${subjectId}`,
+        [{ text: 'OK', onPress: () => router.push('/research/new-subject') }]
+      );
+    } else {
       updateProfile({
         iafCalibration: {
           completed: true,
           timestamp: new Date().toISOString(),
-          iaf: iafResult.frequency,
-          method: 'CRB',
-          desynchronization: iafResult.desynchronization,
-          restSamples: restData.length,
-          taskSamples: taskData.length,
-          power: iafResult.power
+          iaf: 10.2,
+          method: 'Demo'
         }
       });
-      
-      // Disconnect if we connected during calibration
-      if (device && !wasConnectedOnEntryRef.current) {
-        console.log('🔌 Disconnecting device after save');
-        await handleDisconnect();
-      }
-      
       Alert.alert(
-        'Success!',
-        `Your Individual Alpha Frequency has been calibrated:\n\n${iafResult.frequency.toFixed(2)} Hz\n\nThis will be used to personalize your brain entrainment experience.`,
+        'Demo Data Loaded',
+        'IAF set to 10.2 Hz (average value)',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     }
-  };
-
-  const useDemoData = () => {
-    updateProfile({
-      iafCalibration: {
-        completed: true,
-        timestamp: new Date().toISOString(),
-        iaf: 10.2,
-        method: 'Demo'
-      }
-    });
-    Alert.alert(
-      'Demo Data Loaded',
-      'IAF set to 10.2 Hz (average value)',
-      [{ text: 'OK', onPress: () => router.back() }]
-    );
   };
 
   const handleBack = async () => {
@@ -341,7 +391,10 @@ export default function IAFCalibrationScreen() {
   const renderIntro = () => (
     <View style={styles.phaseContainer}>
       <Text style={styles.phaseTitle}>🧘 IAF Calibration</Text>
-      <Text style={styles.phaseSubtitle}>Channel Reactivity-Based Method</Text>
+      <Text style={styles.phaseSubtitle}>
+    {isResearchMode ? `Subject ${subjectId}` : 'Channel Reactivity-Based Method'}
+  </Text>
+
       
       <View style={styles.infoBox}>
         <Text style={styles.infoTitle}>What is IAF?</Text>
