@@ -274,12 +274,7 @@ const handleIAFCalibration = () => {
           </Text>
         )}
 
-        <TouchableOpacity 
-          style={styles.secondaryButton}
-          onPress={() => router.push('/research-mode')}
-        >
-          <Text style={styles.secondaryButtonText}>Research Data Collection </Text>
-        </TouchableOpacity>
+        
       </ScrollView>
 
       <View style={styles.footer}>

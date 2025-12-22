@@ -1,7 +1,7 @@
 import asyncio
 from bleak import BleakClient
 
-DEVICE_ADDRESS = "34:81:F4:33:AD:FC"  # Replace if needed
+DEVICE_ADDRESS = "34:81:F4:33:AE:91"  # Replace if needed
 
 NOTIFY_UUIDS = [
     "49535343-aca3-481c-91ec-d85e28a60318",

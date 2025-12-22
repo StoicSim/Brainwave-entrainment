@@ -1,31 +1,11 @@
-
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const UserProfileContext = createContext();
 
-const DEMO_USER = {
-  profileComplete: true,
-  name: "Simran",
-  age: "23",
-  gender: "F",
-  personalityTest: {
-    completed: true,
-    timestamp: "2024-12-10T10:30:00",
-    scores: {
-      openness: 75,
-      conscientiousness: 82,
-      extraversion: 68,
-      agreeableness: 79,
-      neuroticism: 45
-    }
-  },
-  iafCalibration: {
-    completed: true,
-    timestamp: "2024-12-10T11:00:00",
-    iaf: 10.2
-  }
-};
+// ⚠️ CHANGE THIS to your deployed backend URL
+const API_BASE_URL = 'http://localhost:8000'; 
+// After deployment: 'https://your-app.onrender.com'
 
 const EMPTY_PROFILE = {
   profileComplete: false,
@@ -54,16 +34,34 @@ export function UserProfileProvider({ children }) {
 
   const loadProfile = async () => {
     try {
+      console.log('🔍 Fetching user data from backend...');
+      
+      // Fetch from backend
+      const response = await fetch(`${API_BASE_URL}/user/user_001`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setUserProfile(data);
+        console.log('✅ User data fetched from backend:', data);
+        
+        // Save to local storage as backup
+        await AsyncStorage.setItem('userProfile', JSON.stringify(data));
+      } else {
+        throw new Error('Failed to fetch from backend');
+      }
+      
+    } catch (error) {
+      console.log('⚠️ Backend fetch failed, trying local storage...');
+      
+      // Fallback to local storage
       const stored = await AsyncStorage.getItem('userProfile');
       if (stored) {
         const parsed = JSON.parse(stored);
         setUserProfile(parsed);
-        console.log('Profile loaded:', parsed);
+        console.log('📱 Loaded from local storage');
       } else {
-        console.log('No profile found, using empty profile');
+        console.log('No data found, using empty profile');
       }
-    } catch (error) {
-      console.error('Error loading profile:', error);
     } finally {
       setIsLoading(false);
     }
@@ -81,7 +79,6 @@ export function UserProfileProvider({ children }) {
 
   const updateProfile = (updates) => {
     const updated = { ...userProfile, ...updates };
-    // Check if profile is complete
     updated.profileComplete = 
       updated.name && 
       updated.age && 
@@ -101,6 +98,28 @@ export function UserProfileProvider({ children }) {
   };
 
   const loadDemoData = () => {
+    const DEMO_USER = {
+      profileComplete: true,
+      name: "Simran",
+      age: "23",
+      gender: "F",
+      personalityTest: {
+        completed: true,
+        timestamp: "2024-12-10T10:30:00",
+        scores: {
+          openness: 75,
+          conscientiousness: 82,
+          extraversion: 68,
+          agreeableness: 79,
+          neuroticism: 45
+        }
+      },
+      iafCalibration: {
+        completed: true,
+        timestamp: "2024-12-10T11:00:00",
+        iaf: 10.2
+      }
+    };
     saveProfile(DEMO_USER);
   };
 
