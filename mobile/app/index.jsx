@@ -1,81 +1,30 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useUserProfile } from '../context/UserProfileContext';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { userProfile, updateProfile, isSetupComplete, loadDemoData, resetProfile } = useUserProfile();
-  const [checklistExpanded, setChecklistExpanded] = useState(true);
-
-  const handleCompleteBasicInfo = () => {
-    // Instantly complete basic info with demo data
-    updateProfile({
-      name: 'Sarah',
-      age: '24',
-      gender: 'F'
-    });
-  };
-
-  const handleGoToProfile = () => {
-    // Navigate to profile page to enter actual basic info
-    router.push('/profile');
-  };
-
-  const handlePersonalityTest = () => {
-    // Navigate to the actual personality test
-    router.push('/personality-test');
-  };
-
-  const handlePersonalityTestDemo = () => {
-    // Instantly complete personality test with demo data
-    updateProfile({
-      personalityTest: {
-        completed: true,
-        timestamp: new Date().toISOString(),
-        scores: {
-          openmindedness: 75,
-          conscientiousness: 82,
-          extraversion: 68,
-          agreeableness: 79,
-          negativeemotionality: 45
-        }
-      }
-    });
-  };
-const handleIAFCalibration = () => {
-  router.push('/iaf-calibration');
-};
-
-
-
-  const handleIAFCalibrationDemo = () => {
-   
-    updateProfile({
-      iafCalibration: {
-        completed: true,
-        timestamp: new Date().toISOString(),
-        iaf: 10.2
-      }
-    });
-  };
+  const { userProfile, isLoading, isSetupComplete } = useUserProfile();
 
   const handleStartMonitoring = () => {
-    if (!isSetupComplete()) {
-      Alert.alert(
-        'Setup Incomplete',
-        'Please complete all setup steps before starting monitoring.'
-      );
-      return;
-    }
     router.push('/monitor');
   };
 
+  const handleGoToProfile = () => {
+    router.push('/profile');
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Loading your profile...</Text>
+      </View>
+    );
+  }
+
   const isBasicInfoComplete = userProfile.name && userProfile.age && userProfile.gender;
-  const completedCount = 
-    (isBasicInfoComplete ? 1 : 0) + 
-    (userProfile.personalityTest.completed ? 1 : 0) + 
-    (userProfile.iafCalibration.completed ? 1 : 0);
 
   return (
     <View style={styles.container}>
@@ -94,193 +43,106 @@ const handleIAFCalibration = () => {
           </Text>
         </View>
 
-        {/* Setup Checklist - Collapsible */}
-        {!isSetupComplete() && (
-          <View style={styles.checklistCard}>
-            <TouchableOpacity 
-              style={styles.checklistHeader}
-              onPress={() => setChecklistExpanded(!checklistExpanded)}
-            >
-              <Text style={styles.checklistTitle}>
-                ⚙️ Setup Required ({completedCount}/3 Complete)
-              </Text>
-              <Text style={styles.expandIcon}>{checklistExpanded ? '▼' : '▶'}</Text>
-            </TouchableOpacity>
-
-            {checklistExpanded && (
-              <View style={styles.checklistBody}>
-                {/* Basic Info */}
-                <View style={styles.checklistItem}>
-                  <View style={styles.checklistItemHeader}>
-                    <Text style={styles.checklistIcon}>
-                      {isBasicInfoComplete ? '✅' : '⭕'}
-                    </Text>
-                    <Text style={styles.checklistItemTitle}>Basic Information</Text>
-                  </View>
-                  {isBasicInfoComplete ? (
-                    <Text style={styles.checklistItemDesc}>
-                      {userProfile.name}, {userProfile.age}, {userProfile.gender}
-                    </Text>
-                  ) : (
-                    <>
-                      <Text style={styles.checklistItemDesc}>
-                        Tell us about yourself
-                      </Text>
-                      <View style={styles.buttonRow}>
-                        <TouchableOpacity 
-                          style={[styles.checklistButton, styles.checklistButtonSecondary]}
-                          onPress={handleGoToProfile}
-                        >
-                          <Text style={styles.checklistButtonText}>Enter Info</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.checklistButton}
-                          onPress={handleCompleteBasicInfo}
-                        >
-                          <Text style={styles.checklistButtonText}>Use Demo</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  )}
-                </View>
-
-                {/* Personality Test */}
-                <View style={styles.checklistItem}>
-                  <View style={styles.checklistItemHeader}>
-                    <Text style={styles.checklistIcon}>
-                      {userProfile.personalityTest.completed ? '✅' : '⭕'}
-                    </Text>
-                    <Text style={styles.checklistItemTitle}>Personality Test</Text>
-                  </View>
-                  {userProfile.personalityTest.completed ? (
-                    <Text style={styles.checklistItemDesc}>
-                      Completed on {new Date(userProfile.personalityTest.timestamp).toLocaleDateString()}
-                    </Text>
-                  ) : (
-                    <>
-                      <Text style={styles.checklistItemDesc}>15 min assessment</Text>
-                      <View style={styles.buttonRow}>
-                        <TouchableOpacity 
-                          style={[styles.checklistButton, styles.checklistButtonSecondary]}
-                          onPress={handlePersonalityTest}
-                        >
-                          <Text style={styles.checklistButtonText}>Take Test</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.checklistButton}
-                          onPress={handlePersonalityTestDemo}
-                        >
-                          <Text style={styles.checklistButtonText}>Use Demo</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  )}
-                </View>
-
-                {/* IAF Calibration */}
-                <View style={styles.checklistItem}>
-                  <View style={styles.checklistItemHeader}>
-                    <Text style={styles.checklistIcon}>
-                      {userProfile.iafCalibration.completed ? '✅' : '⭕'}
-                    </Text>
-                    <Text style={styles.checklistItemTitle}>IAF Calibration</Text>
-                  </View>
-                  {userProfile.iafCalibration.completed ? (
-                    <Text style={styles.checklistItemDesc}>
-                      IAF: {userProfile.iafCalibration.iaf} Hz
-                    </Text>
-                  ) : (
-                    <>
-                      <Text style={styles.checklistItemDesc}>2 min brainwave scan</Text>
-<View style={styles.buttonRow}>
-                      <TouchableOpacity 
-                        style={[styles.checklistButton, styles.checklistButtonSecondary]}
-                        onPress={handleIAFCalibration}
-                      >
-                        <Text style={styles.checklistButtonText}>Start Calibration</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.checklistButton}
-                        onPress={handleIAFCalibrationDemo}
-                      >
-                        <Text style={styles.checklistButtonText}>Use Demo</Text>
-                      </TouchableOpacity>
-                      </View>
-                    </>
-                  )}
-                </View>
+        {/* User Profile Summary */}
+        {isSetupComplete() && (
+          <View style={styles.profileCard}>
+            <Text style={styles.profileTitle}>👤 Your Profile</Text>
+            <View style={styles.profileRow}>
+              <Text style={styles.profileLabel}>Name:</Text>
+              <Text style={styles.profileValue}>{userProfile.name}</Text>
+            </View>
+            <View style={styles.profileRow}>
+              <Text style={styles.profileLabel}>Age:</Text>
+              <Text style={styles.profileValue}>{userProfile.age}</Text>
+            </View>
+            <View style={styles.profileRow}>
+              <Text style={styles.profileLabel}>Gender:</Text>
+              <Text style={styles.profileValue}>{userProfile.gender}</Text>
+            </View>
+            
+            {userProfile.personalityTest?.completed && (
+              <View style={styles.profileSection}>
+                <Text style={styles.profileSectionTitle}>✅ Personality Test Complete</Text>
+                <Text style={styles.profileDetail}>
+                  Completed: {new Date(userProfile.personalityTest.timestamp).toLocaleDateString()}
+                </Text>
               </View>
             )}
+            
+            {userProfile.iafCalibration?.completed && (
+              <View style={styles.profileSection}>
+                <Text style={styles.profileSectionTitle}>✅ IAF Calibration Complete</Text>
+                <Text style={styles.profileDetail}>
+                  Your IAF: {userProfile.iafCalibration.iaf} Hz
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity 
+              style={styles.editProfileButton}
+              onPress={handleGoToProfile}
+            >
+              <Text style={styles.editProfileText}>View Full Profile</Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* Setup Complete Badge */}
-        {isSetupComplete() && (
+        {/* Setup Status */}
+        {isSetupComplete() ? (
           <View style={styles.completeBadge}>
             <Text style={styles.completeBadgeIcon}>✅</Text>
-            <Text style={styles.completeBadgeText}>Setup Complete! Ready to monitor.</Text>
+            <Text style={styles.completeBadgeText}>
+              Profile loaded! Ready to monitor.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.warningCard}>
+            <Text style={styles.warningIcon}>⚠️</Text>
+            <Text style={styles.warningTitle}>Profile Incomplete</Text>
+            <Text style={styles.warningDesc}>
+              Some profile data is missing. Please complete your profile setup.
+            </Text>
+            <TouchableOpacity 
+              style={styles.warningButton}
+              onPress={handleGoToProfile}
+            >
+              <Text style={styles.warningButtonText}>Complete Profile</Text>
+            </TouchableOpacity>
           </View>
         )}
-
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity 
-            style={styles.quickActionButton}
-            onPress={loadDemoData}
-          >
-            <Text style={styles.quickActionText}> Load Demo Data</Text>
-          </TouchableOpacity>
-          
-          {(userProfile.name || userProfile.personalityTest.completed || userProfile.iafCalibration.completed) && (
-            <TouchableOpacity 
-              style={[styles.quickActionButton, styles.quickActionDanger]}
-              onPress={() => {
-                Alert.alert(
-                  'Reset Profile',
-                  'Are you sure you want to reset all data?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { 
-                      text: 'Reset', 
-                      style: 'destructive',
-                      onPress: resetProfile 
-                    }
-                  ]
-                );
-              }}
-            >
-              <Text style={styles.quickActionTextDanger}> Reset All</Text>
-            </TouchableOpacity>
-          )}
-        </View>
 
         {/* Main Action Button */}
         <TouchableOpacity 
-          style={[
-            styles.primaryButton,
-            !isSetupComplete() && styles.primaryButtonDisabled
-          ]}
+          style={styles.primaryButton}
           onPress={handleStartMonitoring}
-          disabled={!isSetupComplete()}
         >
-          <Text style={styles.buttonText}>
-            {isSetupComplete() ? 'Start Monitoring' : '🔒 Complete Setup First'}
-          </Text>
+          <Text style={styles.buttonText}>Start Monitoring</Text>
         </TouchableOpacity>
 
-        {!isSetupComplete() && (
-          <Text style={styles.warningText}>
-            Complete the setup steps above to unlock monitoring
-          </Text>
-        )}
-
-        
+        {/* How It Works */}
+        <View style={styles.howItWorksCard}>
+          <Text style={styles.howItWorksTitle}>📊 How It Works</Text>
+          <View style={styles.stepContainer}>
+            <View style={styles.step}>
+              <Text style={styles.stepNumber}>1</Text>
+              <Text style={styles.stepText}>Connect your EEG device</Text>
+            </View>
+            <View style={styles.step}>
+              <Text style={styles.stepNumber}>2</Text>
+              <Text style={styles.stepText}>Monitor your brainwaves in real-time</Text>
+            </View>
+            <View style={styles.step}>
+              <Text style={styles.stepNumber}>3</Text>
+              <Text style={styles.stepText}>Save recordings for analysis</Text>
+            </View>
+          </View>
+        </View>
       </ScrollView>
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Connect your mind to the waves</Text>
         <Text style={styles.footerSubtext}>
-          Next steps: Cloud storage → AI tone generation
+          Powered by backend API • Real-time EEG monitoring
         </Text>
       </View>
     </View>
@@ -291,6 +153,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#666',
   },
   scrollView: {
     flex: 1,
@@ -329,78 +202,64 @@ const styles = StyleSheet.create({
     color: '#555',
     lineHeight: 20,
   },
-  checklistCard: {
+  profileCard: {
     backgroundColor: '#fff',
     borderRadius: 15,
+    padding: 20,
     marginBottom: 20,
-    overflow: 'hidden',
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  checklistHeader: {
+  profileTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+  },
+  profileRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#2196F3',
-  },
-  checklistTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  expandIcon: {
-    fontSize: 16,
-    color: '#fff',
-  },
-  checklistBody: {
-    padding: 15,
-  },
-  checklistItem: {
-    marginBottom: 20,
-    paddingBottom: 20,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  checklistItemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  checklistIcon: {
-    fontSize: 20,
-    marginRight: 10,
-  },
-  checklistItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  checklistItemDesc: {
-    fontSize: 13,
+  profileLabel: {
+    fontSize: 15,
     color: '#666',
-    marginLeft: 30,
-    marginBottom: 10,
+    fontWeight: '500',
   },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginLeft: 30,
+  profileValue: {
+    fontSize: 15,
+    color: '#333',
+    fontWeight: '600',
   },
-  checklistButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+  profileSection: {
+    marginTop: 15,
+    padding: 12,
+    backgroundColor: '#E8F5E9',
     borderRadius: 8,
-    alignSelf: 'flex-start',
   },
-  checklistButtonSecondary: {
+  profileSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginBottom: 4,
+  },
+  profileDetail: {
+    fontSize: 13,
+    color: '#555',
+  },
+  editProfileButton: {
+    marginTop: 15,
+    padding: 12,
     backgroundColor: '#2196F3',
+    borderRadius: 8,
+    alignItems: 'center',
   },
-  checklistButtonText: {
+  editProfileText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
@@ -425,47 +284,94 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#2E7D32',
   },
+  warningCard: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FF9800',
+  },
+  warningIcon: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  warningTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#F57C00',
+    marginBottom: 8,
+  },
+  warningDesc: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  warningButton: {
+    backgroundColor: '#FF9800',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  warningButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   primaryButton: {
     backgroundColor: '#4CAF50',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
-  primaryButtonDisabled: {
-    backgroundColor: '#ccc',
-    elevation: 0,
-    opacity: 0.7,
-  },
   buttonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
   },
-  warningText: {
-    fontSize: 13,
-    color: '#F44336',
-    textAlign: 'center',
-    marginBottom: 15,
-    fontStyle: 'italic',
-  },
-  secondaryButton: {
+  howItWorksCard: {
     backgroundColor: '#fff',
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#4CAF50',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
   },
-  secondaryButtonText: {
-    color: '#4CAF50',
+  howItWorksTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+  },
+  stepContainer: {
+    gap: 12,
+  },
+  step: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  stepNumber: {
+    width: 32,
+    height: 32,
+    backgroundColor: '#2196F3',
+    color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    lineHeight: 32,
+    borderRadius: 16,
+  },
+  stepText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#555',
   },
   footer: {
     padding: 20,
@@ -484,30 +390,5 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     marginTop: 5,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 15,
-  },
-  quickActionButton: {
-    flex: 1,
-    backgroundColor: '#9C27B0',
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  quickActionDanger: {
-    backgroundColor: '#F44336',
-  },
-  quickActionText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  quickActionTextDanger: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });

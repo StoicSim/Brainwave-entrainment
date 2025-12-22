@@ -32,23 +32,26 @@ export function UserProfileProvider({ children }) {
 
   const loadProfile = async () => {
     try {
-      console.log(' Fetching user data from backend...');
+      console.log('🔍 Fetching user data from backend...');
       
+      // Fetch from backend
       const response = await fetch(`${API_BASE_URL}/user/user_001`);
       
       if (response.ok) {
         const data = await response.json();
         setUserProfile(data);
-        console.log('User data fetched from backend:', data);
+        console.log('✅ User data fetched from backend:', data);
         
+        // Save to local storage as backup
         await AsyncStorage.setItem('userProfile', JSON.stringify(data));
       } else {
         throw new Error('Failed to fetch from backend');
       }
       
     } catch (error) {
-      console.log(' Backend fetch failed, trying local storage...');
+      console.log('⚠️ Backend fetch failed, trying local storage...');
       
+      // Fallback to local storage
       const stored = await AsyncStorage.getItem('userProfile');
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -92,32 +95,6 @@ export function UserProfileProvider({ children }) {
             userProfile.iafCalibration.completed);
   };
 
-  const loadDemoData = () => {
-    const DEMO_USER = {
-      profileComplete: true,
-      name: "Simran",
-      age: "23",
-      gender: "F",
-      personalityTest: {
-        completed: true,
-        timestamp: "2024-12-10T10:30:00",
-        scores: {
-          openness: 75,
-          conscientiousness: 82,
-          extraversion: 68,
-          agreeableness: 79,
-          neuroticism: 45
-        }
-      },
-      iafCalibration: {
-        completed: true,
-        timestamp: "2024-12-10T11:00:00",
-        iaf: 10.2
-      }
-    };
-    saveProfile(DEMO_USER);
-  };
-
   const resetProfile = async () => {
     try {
       await AsyncStorage.removeItem('userProfile');
@@ -128,13 +105,18 @@ export function UserProfileProvider({ children }) {
     }
   };
 
+  const refreshFromBackend = async () => {
+    setIsLoading(true);
+    await loadProfile();
+  };
+
   return (
     <UserProfileContext.Provider value={{ 
       userProfile, 
       updateProfile, 
       isSetupComplete,
-      loadDemoData,
       resetProfile,
+      refreshFromBackend,
       isLoading
     }}>
       {children}
