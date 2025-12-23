@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="EEG User API")
 
-# CORS for React Native
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -11,7 +10,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Test user data (matches your existing structure)
 MOCK_USERS = {
     "user_001": {
         "id": "user_001",

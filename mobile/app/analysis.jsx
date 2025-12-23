@@ -1,4 +1,4 @@
-// Updated AnalysisScreen.jsx with fixed save & export
+// Updated AnalysisScreen.jsx with Combined Recording Mode
 
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, TextInput, Switch } from 'react-native';
@@ -20,11 +20,13 @@ export default function AnalysisScreen() {
   } = useEEGData();
 
   const [isRecording, setIsRecording] = useState(false);
-  const [recordedData, setRecordedData] = useState([]); // Array of { bandPowers, psd, metrics, timestamp }
+  const [currentPhase, setCurrentPhase] = useState('no_music'); // 'no_music' or 'music'
+  const [noMusicData, setNoMusicData] = useState([]); // Data from first recording
+  const [musicData, setMusicData] = useState([]); // Data from second recording
   const [recordingStartTime, setRecordingStartTime] = useState(null);
-  const [hasMusic, setHasMusic] = useState(false);
   const [musicLink, setMusicLink] = useState('');
   const [showSessions, setShowSessions] = useState(false);
+  const [showMusicLinkInput, setShowMusicLinkInput] = useState(false);
 
   const eegProcessor = useRef(new EEGProcessor(512, 512)).current;
   const recordingInterval = useRef(null);
@@ -37,7 +39,7 @@ export default function AnalysisScreen() {
            userProfile.iafCalibration?.iaf;
   };
 
-  // Start recording - capture data every second
+  // Start recording
   const handleStartRecording = () => {
     if (!isProfileComplete()) {
       Alert.alert(
@@ -55,15 +57,19 @@ export default function AnalysisScreen() {
 
     const startTime = Date.now();
     setIsRecording(true);
-    setRecordedData([]);
     setRecordingStartTime(startTime);
 
-    // Capture data every 1 second (1000ms)
+    // Capture data every 1 second
     recordingInterval.current = setInterval(() => {
       captureDataPoint();
     }, 1000);
 
-    Alert.alert('Recording Started', 'EEG data is being recorded. Press Stop when finished.');
+    Alert.alert(
+      'Recording Started', 
+      currentPhase === 'no_music' 
+        ? 'Recording WITHOUT music. Press Stop when finished.'
+        : 'Recording WITH music. Press Stop when finished.'
+    );
   };
 
   // Capture a single data point
@@ -74,10 +80,8 @@ export default function AnalysisScreen() {
     }
 
     try {
-      // Calculate PSD
       const psd = eegProcessor.computePSD(rawEEGBuffer);
       
-      // Extract 8 band powers
       const bandPowers = {
         Delta: psd.bandPowers.Delta.power,
         Theta: psd.bandPowers.Theta.power,
@@ -89,7 +93,6 @@ export default function AnalysisScreen() {
         GammaHigh: psd.bandPowers.GammaHigh.power,
       };
 
-      // Extract PSD for 6-14 Hz (9 frequency points)
       const psdPoints = {};
       for (let freq = 6; freq <= 14; freq++) {
         const idx = psd.frequencies.findIndex(f => Math.abs(f - freq) < 0.5);
@@ -98,31 +101,37 @@ export default function AnalysisScreen() {
         }
       }
 
-      // Capture metrics (Signal Quality, Attention, Meditation)
       const metricsSnapshot = {
-        signalQuality: metrics.poorSignal, // 0-200 (lower is better)
-        attention: metrics.attention, // 0-100
-        meditation: metrics.meditation // 0-100
+        signalQuality: metrics.poorSignal,
+        attention: metrics.attention,
+        meditation: metrics.meditation
       };
 
-      // Add data point to recorded data
-      setRecordedData(prev => [...prev, {
-        timestamp: Date.now(),
+      const dataPoint = {
+        timestamp: new Date().toISOString(), // Absolute ISO timestamp
+        sessionType: currentPhase,
+        musicLink: currentPhase === 'music' ? musicLink : '',
         bandPowers,
         psdPoints,
         metrics: metricsSnapshot
-      }]);
+      };
+
+      // Store in appropriate array based on current phase
+      if (currentPhase === 'no_music') {
+        setNoMusicData(prev => [...prev, dataPoint]);
+      } else {
+        setMusicData(prev => [...prev, dataPoint]);
+      }
 
     } catch (error) {
       console.error('Error capturing data point:', error);
     }
   };
 
-  // Stop recording and save
+  // Stop recording
   const handleStopRecording = () => {
     if (!isRecording) return;
 
-    // Clear interval
     if (recordingInterval.current) {
       clearInterval(recordingInterval.current);
       recordingInterval.current = null;
@@ -130,61 +139,122 @@ export default function AnalysisScreen() {
 
     setIsRecording(false);
 
-    if (recordedData.length === 0) {
+    const currentData = currentPhase === 'no_music' ? noMusicData : musicData;
+    
+    if (currentData.length === 0) {
       Alert.alert('No Data', 'No data was recorded. Please try again.');
       return;
     }
 
     const duration = ((Date.now() - recordingStartTime) / 1000).toFixed(1);
 
+    // Show different options based on current phase
+    if (currentPhase === 'no_music') {
+      Alert.alert(
+        'Recording Stopped',
+        `Recorded ${noMusicData.length} data points (${duration}s) WITHOUT music.\n\nWhat would you like to do?`,
+        [
+          { 
+            text: 'Discard', 
+            style: 'cancel', 
+            onPress: () => {
+              setNoMusicData([]);
+              setRecordingStartTime(null);
+            }
+          },
+          { 
+            text: 'Save & Finish', 
+            onPress: handleSaveSession
+          },
+          { 
+            text: 'Continue with Music', 
+            onPress: handleContinueWithMusic
+          }
+        ]
+      );
+    } else {
+      // Music phase completed
+      Alert.alert(
+        'Recording Stopped',
+        `Recorded ${musicData.length} data points (${duration}s) WITH music.\n\nReady to save combined session?`,
+        [
+          { 
+            text: 'Cancel', 
+            style: 'cancel',
+            onPress: () => {
+              setMusicData([]);
+            }
+          },
+          { 
+            text: 'Save & Export', 
+            onPress: handleSaveSession
+          }
+        ]
+      );
+    }
+  };
+
+  // Continue with music recording
+  const handleContinueWithMusic = () => {
+    setShowMusicLinkInput(true);
+  };
+
+  // Start music recording after link is entered
+  const handleStartMusicRecording = () => {
+    if (!musicLink.trim()) {
+      Alert.alert('Music Link Required', 'Please enter a music link before continuing.');
+      return;
+    }
+
+    setCurrentPhase('music');
+    setShowMusicLinkInput(false);
+    
     Alert.alert(
-      'Recording Stopped',
-      `Recorded ${recordedData.length} data points over ${duration} seconds.\n\nReady to save session?`,
-      [
-        { text: 'Cancel', style: 'cancel', onPress: () => {
-          setRecordedData([]);
-          setRecordingStartTime(null);
-        }},
-        { text: 'Save & Export', onPress: handleSaveAndExport }
-      ]
+      'Ready to Record WITH Music',
+      'Press "Start Recording" to begin recording with music playing.',
+      [{ text: 'OK' }]
     );
   };
 
-  // Save and export session
-  const handleSaveAndExport = async () => {
-    if (recordedData.length === 0) {
+  // Save session (handles both single and combined)
+  const handleSaveSession = async () => {
+    const allData = [...noMusicData, ...musicData];
+    
+    if (allData.length === 0) {
       Alert.alert('No Data', 'No recorded data to save.');
       return;
     }
 
     try {
-      // Prepare music condition
-      const musicCondition = hasMusic ? 'music' : 'no_music';
-      const musicLinkValue = hasMusic ? musicLink : null;
-
-      // Save session with recorded data and recording start time
+      // Save session
       const savedSession = await saveSession(
         userProfile,
-        recordedData,
-        musicCondition,
-        musicLinkValue,
-        recordingStartTime // Pass the recording start time
+        allData, // Combined data from both phases
+        recordingStartTime
       );
 
-      // Export immediately using the returned session object
+      // Export immediately
       await exportSession(savedSession);
+
+      const totalPoints = allData.length;
+      const noMusicCount = noMusicData.length;
+      const musicCount = musicData.length;
 
       Alert.alert(
         'Success!',
-        `Session saved and exported!\n\n${recordedData.length} data points recorded.`,
+        `Session saved and exported!\n\nTotal: ${totalPoints} data points\n` +
+        `Without music: ${noMusicCount}\n` +
+        `With music: ${musicCount}`,
         [{ text: 'OK' }]
       );
 
-      // Reset state
-      setRecordedData([]);
+      // Reset all state
+      setNoMusicData([]);
+      setMusicData([]);
       setRecordingStartTime(null);
-      setHasMusic(false);
       setMusicLink('');
+      setCurrentPhase('no_music');
+      setShowMusicLinkInput(false);
 
     } catch (error) {
       console.error('Error saving session:', error);
@@ -219,6 +289,8 @@ export default function AnalysisScreen() {
     );
   };
 
+  const totalRecordedPoints = noMusicData.length + musicData.length;
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -246,6 +318,12 @@ export default function AnalysisScreen() {
               
               <View style={styles.infoCard}>
                 <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Current Phase:</Text>
+                  <Text style={styles.infoValue}>
+                    {currentPhase === 'no_music' ? '🔇 No Music' : '🎵 With Music'}
+                  </Text>
+                </View>
+                <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Buffer Size:</Text>
                   <Text style={styles.infoValue}>{rawEEGBuffer.length} samples</Text>
                 </View>
@@ -266,15 +344,6 @@ export default function AnalysisScreen() {
                   <Text style={styles.infoLabel}>Meditation:</Text>
                   <Text style={styles.infoValue}>{metrics.meditation}</Text>
                 </View>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Ready to Record:</Text>
-                  <Text style={[
-                    styles.infoValue,
-                    { color: rawEEGBuffer.length >= 512 ? '#4CAF50' : '#F44336' }
-                  ]}>
-                    {rawEEGBuffer.length >= 512 ? 'Yes' : 'No (need 512+)'}
-                  </Text>
-                </View>
                 {isRecording && (
                   <>
                     <View style={styles.infoRow}>
@@ -284,8 +353,10 @@ export default function AnalysisScreen() {
                       </Text>
                     </View>
                     <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Data Points:</Text>
-                      <Text style={styles.infoValue}>{recordedData.length}</Text>
+                      <Text style={styles.infoLabel}>Current Points:</Text>
+                      <Text style={styles.infoValue}>
+                        {currentPhase === 'no_music' ? noMusicData.length : musicData.length}
+                      </Text>
                     </View>
                     <View style={styles.infoRow}>
                       <Text style={styles.infoLabel}>Duration:</Text>
@@ -295,16 +366,30 @@ export default function AnalysisScreen() {
                     </View>
                   </>
                 )}
+                {totalRecordedPoints > 0 && !isRecording && (
+                  <>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>No Music Data:</Text>
+                      <Text style={styles.infoValue}>{noMusicData.length} points</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Music Data:</Text>
+                      <Text style={styles.infoValue}>{musicData.length} points</Text>
+                    </View>
+                  </>
+                )}
               </View>
 
               {!isRecording ? (
                 <TouchableOpacity
                   style={[styles.button, styles.startButton]}
                   onPress={handleStartRecording}
-                  disabled={rawEEGBuffer.length < 512}
+                  disabled={rawEEGBuffer.length < 512 || showMusicLinkInput}
                 >
                   <Ionicons name="play-circle" size={24} color="#fff" />
-                  <Text style={styles.buttonText}>Start Recording</Text>
+                  <Text style={styles.buttonText}>
+                    Start Recording {currentPhase === 'music' ? '(With Music)' : ''}
+                  </Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
@@ -316,54 +401,59 @@ export default function AnalysisScreen() {
                 </TouchableOpacity>
               )}
 
-              {recordedData.length > 0 && !isRecording && (
+              {totalRecordedPoints > 0 && !isRecording && !showMusicLinkInput && (
                 <View style={styles.resultsCard}>
                   <Text style={styles.resultsTitle}>📊 Recorded Data Ready</Text>
                   <Text style={styles.resultsText}>
-                    {recordedData.length} data points captured
+                    Total: {totalRecordedPoints} data points
                   </Text>
                   <Text style={styles.resultsSubtext}>
-                    8 band powers + 9 PSD values + Signal/Attention/Meditation per point
+                    No Music: {noMusicData.length} | Music: {musicData.length}
                   </Text>
                 </View>
               )}
             </View>
 
-            {/* Music Condition Section */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Music Condition</Text>
-              
-              <View style={styles.musicCard}>
-                <View style={styles.switchRow}>
-                  <Text style={styles.switchLabel}>Was music playing during recording?</Text>
-                  <Switch
-                    value={hasMusic}
-                    onValueChange={setHasMusic}
-                    trackColor={{ false: '#ccc', true: '#4CAF50' }}
-                    thumbColor={hasMusic ? '#fff' : '#f4f3f4'}
-                    disabled={isRecording}
+            {/* Music Link Input Section */}
+            {showMusicLinkInput && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Enter Music Information</Text>
+                
+                <View style={styles.musicCard}>
+                  <Text style={styles.inputLabel}>Music Link:</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="https://spotify.com/track/..."
+                    value={musicLink}
+                    onChangeText={setMusicLink}
+                    autoCapitalize="none"
+                    keyboardType="url"
+                    autoFocus
                   />
-                </View>
+                  <Text style={styles.inputHint}>
+                    Enter the link to the music you'll be playing
+                  </Text>
 
-                {hasMusic && (
-                  <View style={styles.musicLinkContainer}>
-                    <Text style={styles.inputLabel}>Music Link (optional):</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="https://spotify.com/..."
-                      value={musicLink}
-                      onChangeText={setMusicLink}
-                      autoCapitalize="none"
-                      keyboardType="url"
-                      editable={!isRecording}
-                    />
-                    <Text style={styles.inputHint}>
-                      Paste a link to the music that was playing
-                    </Text>
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={[styles.button, styles.cancelButton]}
+                      onPress={() => {
+                        setShowMusicLinkInput(false);
+                        setMusicLink('');
+                      }}
+                    >
+                      <Text style={styles.buttonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.button, styles.continueButton]}
+                      onPress={handleStartMusicRecording}
+                    >
+                      <Text style={styles.buttonText}>Continue</Text>
+                    </TouchableOpacity>
                   </View>
-                )}
+                </View>
               </View>
-            </View>
+            )}
 
             {/* Saved Sessions Section */}
             <View style={styles.section}>
@@ -390,44 +480,50 @@ export default function AnalysisScreen() {
 
               {showSessions && sessions.length > 0 && (
                 <View style={styles.sessionsList}>
-                  {sessions.map((session) => (
-                    <View key={session.id} style={styles.sessionCard}>
-                      <View style={styles.sessionHeader}>
-                        <Text style={styles.sessionTitle}>
-                          {session.userProfile.name} - {new Date(session.timestamp).toLocaleDateString()}
-                        </Text>
-                        <View style={styles.sessionActions}>
-                          <TouchableOpacity
-                            style={styles.iconButton}
-                            onPress={() => exportSession(session.id)}
-                          >
-                            <Ionicons name="download-outline" size={20} color="#2196F3" />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.iconButton}
-                            onPress={() => handleDeleteSession(session.id)}
-                          >
-                            <Ionicons name="trash-outline" size={20} color="#F44336" />
-                          </TouchableOpacity>
+                  {sessions.map((session) => {
+                    const noMusicCount = session.dataPoints?.filter(d => d.sessionType === 'no_music').length || 0;
+                    const musicCount = session.dataPoints?.filter(d => d.sessionType === 'music').length || 0;
+                    
+                    return (
+                      <View key={session.id} style={styles.sessionCard}>
+                        <View style={styles.sessionHeader}>
+                          <Text style={styles.sessionTitle}>
+                            {session.userProfile.name} - {new Date(session.timestamp).toLocaleDateString()}
+                          </Text>
+                          <View style={styles.sessionActions}>
+                            <TouchableOpacity
+                              style={styles.iconButton}
+                              onPress={() => exportSession(session.id)}
+                            >
+                              <Ionicons name="download-outline" size={20} color="#2196F3" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.iconButton}
+                              onPress={() => handleDeleteSession(session.id)}
+                            >
+                              <Ionicons name="trash-outline" size={20} color="#F44336" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        
+                        <View style={styles.sessionDetails}>
+                          <Text style={styles.sessionDetailText}>
+                            Age: {session.userProfile.age} | IAF: {session.userProfile.iaf?.toFixed(2)} Hz
+                          </Text>
+                          <Text style={styles.sessionDetailText}>
+                            Total Points: {session.dataPoints?.length || 0} 
+                            {musicCount > 0 && ` (🔇 ${noMusicCount} | 🎵 ${musicCount})`}
+                          </Text>
+                          <Text style={styles.sessionDetailText}>
+                            Type: {musicCount > 0 ? 'Combined Session' : 'Single Session'}
+                          </Text>
+                          <Text style={styles.sessionDetailText}>
+                            Time: {new Date(session.timestamp).toLocaleTimeString()}
+                          </Text>
                         </View>
                       </View>
-                      
-                      <View style={styles.sessionDetails}>
-                        <Text style={styles.sessionDetailText}>
-                          Age: {session.userProfile.age} | IAF: {session.userProfile.iaf?.toFixed(2)} Hz
-                        </Text>
-                        <Text style={styles.sessionDetailText}>
-                          Data Points: {session.dataPoints?.length || 0}
-                        </Text>
-                        <Text style={styles.sessionDetailText}>
-                          Music: {session.musicCondition === 'music' ? '🎵 Yes' : '🔇 No'}
-                        </Text>
-                        <Text style={styles.sessionDetailText}>
-                          Time: {new Date(session.timestamp).toLocaleTimeString()}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
 
@@ -554,6 +650,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF9800',
     marginBottom: 15,
   },
+  continueButton: {
+    backgroundColor: '#2196F3',
+    flex: 1,
+  },
+  cancelButton: {
+    backgroundColor: '#9E9E9E',
+    flex: 1,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 15,
+  },
   buttonText: {
     color: '#fff',
     fontSize: 16,
@@ -589,21 +698,6 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 15,
     elevation: 1,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  switchLabel: {
-    fontSize: 15,
-    color: '#333',
-    flex: 1,
-    marginRight: 15,
-  },
-  musicLinkContainer: {
-    marginTop: 10,
   },
   inputLabel: {
     fontSize: 14,
