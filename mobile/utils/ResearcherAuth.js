@@ -3,7 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const ACCOUNTS_KEY = 'researcher_accounts';
 const CURRENT_USER_KEY = 'researcher_current_user';
 const AUTH_KEY = 'researcher_logged_in';
-
+let _isLoggedIn = false;
+export const isLoggedInSync = () => _isLoggedIn;
 // Default account — always exists as fallback
 const DEFAULT_ACCOUNTS = [
   {
@@ -84,11 +85,13 @@ export const loginResearcher = async (username, password) => {
   }
   await AsyncStorage.setItem(AUTH_KEY, 'true');
   await AsyncStorage.setItem(CURRENT_USER_KEY, account.username.toLowerCase());
+  _isLoggedIn = true;
   return { success: true, account };
 };
 
 export const logoutResearcher = async () => {
   try {
+    _isLoggedIn = false
     await AsyncStorage.removeItem(AUTH_KEY);
     await AsyncStorage.removeItem(CURRENT_USER_KEY);
   } catch (error) {

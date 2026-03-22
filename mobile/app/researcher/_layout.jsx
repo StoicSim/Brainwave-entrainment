@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native
 import { Slot, useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isLoggedIn, isLoggedInSync } from '../../utils/ResearcherAuth';
+
 
 const AUTH_KEY = 'researcher_logged_in';
 
@@ -142,12 +144,13 @@ export default function ResearcherLayout() {
 
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [pathname]);
 
   const checkAuth = async () => {
   try {
-    const loggedIn = await AsyncStorage.getItem(AUTH_KEY);
-    setIsAuthenticated(loggedIn === 'true');
+    // Check sync flag first — avoids race condition after login
+    const loggedIn = isLoggedInSync() || await isLoggedIn();
+    setIsAuthenticated(loggedIn);
   } catch (error) {
     console.warn('Auth check error:', error.message);
     setIsAuthenticated(false);
