@@ -1,178 +1,196 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useBleContext } from '../context/BleContext';
 
-export default function LoginScreen() {
+export default function ModeSelectionScreen() {
   const router = useRouter();
+  const { handleDisconnect, device } = useBleContext();
 
-  const handleLogin = () => {
-    // TODO: Replace with Firebase authentication
-    router.push('/monitor');
+  const handleGuestMode = async () => {
+    if (device) await handleDisconnect();
+    router.push('/guest/monitor');
+  };
+
+  const handleResearcherMode = async () => {
+    if (device) await handleDisconnect();
+    router.push('/researcher/login');
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topSection}>
-        <Text style={styles.appName}>NeuroFlow</Text>
-        <Text style={styles.tagline}>Alpha Wave Focus and Relaxation</Text>
-      </View>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
 
-      <View style={styles.middleSection}>
-        <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>{'🧠 What is NeuroFlow?'}</Text>
-          <Text style={styles.infoText}>
-            NeuroFlow connects to your EEG device to monitor your brainwaves
-            in real-time, generating music personalized to increase your alpha
-            wave activity for deeper relaxation and calm focus.
-          </Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.appName}>NeuroFlow</Text>
+          <Text style={styles.tagline}>Alpha Wave Focus and Relaxation</Text>
         </View>
 
-        <View style={styles.featureRow}>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureIcon}>📡</Text>
-            <Text style={styles.featureLabel}>Real-time EEG</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureIcon}>🎵</Text>
-            <Text style={styles.featureLabel}>AI Music</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureIcon}>🌊</Text>
-            <Text style={styles.featureLabel}>Alpha Waves</Text>
-          </View>
+        {/* Mode Cards */}
+        <View style={styles.cardsContainer}>
+          <Text style={styles.selectText}>Select Mode</Text>
+
+          {/* Guest Mode Card */}
+          <TouchableOpacity
+            style={[styles.card, styles.guestCard]}
+            onPress={handleGuestMode}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.cardIcon}>🎵</Text>
+            <View style={styles.cardContent}>
+              <Text style={styles.cardTitle}>Guest Mode</Text>
+              <Text style={styles.cardDescription}>
+                Connect your EEG device and generate personalized alpha wave music using AI
+              </Text>
+              <View style={styles.cardBadge}>
+                <Text style={styles.cardBadgeText}>No login required</Text>
+              </View>
+            </View>
+            <Text style={styles.cardArrow}>›</Text>
+          </TouchableOpacity>
+
+          {/* Researcher Mode Card */}
+          <TouchableOpacity
+            style={[styles.card, styles.researcherCard]}
+            onPress={handleResearcherMode}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.cardIcon}>🔬</Text>
+            <View style={styles.cardContent}>
+              <Text style={styles.cardTitle}>Researcher Mode</Text>
+              <Text style={styles.cardDescription}>
+                Collect and export EEG session data for AI training pipeline
+              </Text>
+              <View style={[styles.cardBadge, styles.cardBadgeResearcher]}>
+                <Text style={[styles.cardBadgeText, styles.cardBadgeTextResearcher]}>
+                  Login required
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.cardArrow}>›</Text>
+          </TouchableOpacity>
         </View>
-      </View>
 
-      <View style={styles.bottomSection}>
-        <TouchableOpacity 
-          style={styles.loginButton}
-          onPress={handleLogin}
-        >
-          <Text style={styles.loginButtonText}>Get Started</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.signupButton}
-          onPress={handleLogin}
-        >
-          <Text style={styles.signupButtonText}>Create Account</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.disclaimer}>
-          {'Firebase authentication coming soon.\nTap either button to continue for now.'}
+        {/* Footer */}
+        <Text style={styles.footer}>
+          Pulchowk Campus, IOE — Brainwave Entrainment Project
         </Text>
+
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    paddingHorizontal: 25,
-    paddingTop: 80,
-    paddingBottom: 40,
+    backgroundColor: '#f0f4f8',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 30,
     justifyContent: 'space-between',
   },
-  topSection: {
+  header: {
     alignItems: 'center',
+    marginBottom: 20,
   },
   appName: {
-    fontSize: 42,
+    fontSize: 44,
     fontWeight: 'bold',
     color: '#2E7D32',
     letterSpacing: 1,
     marginBottom: 8,
   },
   tagline: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#666',
     textAlign: 'center',
   },
-  middleSection: {
+  cardsContainer: {
+    flex: 1,
+    justifyContent: 'center',
     gap: 20,
   },
-  infoBox: {
-    backgroundColor: '#E8F5E9',
-    padding: 22,
-    borderRadius: 16,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 10,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#555',
-    lineHeight: 22,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  featureItem: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 18,
-    borderRadius: 14,
-    marginHorizontal: 5,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  featureIcon: {
-    fontSize: 28,
-    marginBottom: 8,
-  },
-  featureLabel: {
-    fontSize: 12,
-    color: '#555',
+  selectText: {
+    fontSize: 13,
+    color: '#999',
     fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: 8,
     textAlign: 'center',
   },
-  bottomSection: {
-    gap: 12,
-  },
-  loginButton: {
-    backgroundColor: '#4CAF50',
-    padding: 18,
-    borderRadius: 14,
+  card: {
+    flexDirection: 'row',
     alignItems: 'center',
+    padding: 22,
+    borderRadius: 20,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    gap: 16,
   },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  signupButton: {
+  guestCard: {
     backgroundColor: '#fff',
-    padding: 18,
-    borderRadius: 14,
-    alignItems: 'center',
     borderWidth: 2,
     borderColor: '#4CAF50',
   },
-  signupButtonText: {
-    color: '#4CAF50',
-    fontSize: 18,
-    fontWeight: 'bold',
+  researcherCard: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#2196F3',
   },
-  disclaimer: {
-    fontSize: 12,
-    color: '#aaa',
-    textAlign: 'center',
-    marginTop: 5,
+  cardIcon: {
+    fontSize: 40,
+  },
+  cardContent: {
+    flex: 1,
+    gap: 6,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  cardDescription: {
+    fontSize: 13,
+    color: '#666',
     lineHeight: 18,
+  },
+  cardBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginTop: 4,
+  },
+  cardBadgeResearcher: {
+    backgroundColor: '#E3F2FD',
+  },
+  cardBadgeText: {
+    fontSize: 11,
+    color: '#2E7D32',
+    fontWeight: '600',
+  },
+  cardBadgeTextResearcher: {
+    color: '#1565C0',
+  },
+  cardArrow: {
+    fontSize: 32,
+    color: '#ccc',
+    fontWeight: '300',
+  },
+  footer: {
+    fontSize: 11,
+    color: '#bbb',
+    textAlign: 'center',
+    marginTop: 20,
   },
 });
