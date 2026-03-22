@@ -4,15 +4,8 @@ import {
   StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-
-const RESEARCHER_CREDENTIALS = {
-  username: 'researcher',
-  password: 'neuroflow2025',
-};
-
-const AUTH_KEY = 'researcher_logged_in';
+import { loginResearcher, isLoggedIn } from '../../utils/ResearcherAuth';
 
 export default function ResearcherLoginScreen() {
   const router = useRouter();
@@ -22,17 +15,13 @@ export default function ResearcherLoginScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Check if already logged in
   useEffect(() => {
     checkExistingSession();
   }, []);
 
   const checkExistingSession = async () => {
     try {
-      const loggedIn = await AsyncStorage.getItem(AUTH_KEY);
-      if (loggedIn === 'true') {
-        router.replace('/researcher/monitor');
-      }
+      await isLoggedIn(); // just checks, layout handles redirect
     } catch (error) {
       console.warn('Session check error:', error.message);
     } finally {
@@ -47,25 +36,16 @@ export default function ResearcherLoginScreen() {
     }
 
     setIsLoggingIn(true);
+    await new Promise(resolve => setTimeout(resolve, 600));
 
-    // Simulate network delay for realism
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    if (
-      username.trim().toLowerCase() === RESEARCHER_CREDENTIALS.username &&
-      password === RESEARCHER_CREDENTIALS.password
-    ) {
-      try {
-        await AsyncStorage.setItem(AUTH_KEY, 'true');
-        router.replace('/researcher/monitor');
-      } catch (error) {
-        console.warn('Login storage error:', error.message);
-      }
-    } else {
-      Alert.alert('Invalid Credentials', 'Incorrect username or password.');
-    }
-
+    const result = await loginResearcher(username, password);
     setIsLoggingIn(false);
+
+    if (result.success) {
+      router.replace('/researcher/monitor');
+    } else {
+      Alert.alert('Login Failed', result.error);
+    }
   };
 
   if (isLoading) {
@@ -84,10 +64,7 @@ export default function ResearcherLoginScreen() {
       <View style={styles.content}>
 
         {/* Back button */}
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.replace('/')}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/')}>
           <Ionicons name="arrow-back" size={24} color="#2196F3" />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
@@ -133,15 +110,8 @@ export default function ResearcherLoginScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color="#999"
-                />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#999" />
               </TouchableOpacity>
             </View>
           </View>
@@ -160,13 +130,24 @@ export default function ResearcherLoginScreen() {
               </>
             )}
           </TouchableOpacity>
+
+          {/* Register link */}
+          <TouchableOpacity
+            style={styles.registerLink}
+            onPress={() => router.push('/researcher/register')}
+          >
+            <Text style={styles.registerLinkText}>
+              New researcher? <Text style={styles.registerLinkBold}>Create an account</Text>
+            </Text>
+          </TouchableOpacity>
+
         </View>
 
-        {/* Demo credentials hint */}
+        {/* Default credentials hint */}
         <View style={styles.hintCard}>
           <Ionicons name="information-circle-outline" size={16} color="#2196F3" />
           <Text style={styles.hintText}>
-            Demo credentials — username: researcher / password: neuroflow2025
+            Default account — username: researcher / password: neuroflow2025
           </Text>
         </View>
 
@@ -280,6 +261,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: 'bold',
+  },
+  registerLink: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  registerLinkText: {
+    fontSize: 14,
+    color: '#888',
+  },
+  registerLinkBold: {
+    color: '#2196F3',
+    fontWeight: '700',
   },
   hintCard: {
     flexDirection: 'row',

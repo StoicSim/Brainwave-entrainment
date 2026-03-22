@@ -44,8 +44,8 @@ function ResearcherLayoutContent() {
   }, []);
 
   // Don't show tab bar on login screen
-  const showTabBar = pathname !== '/researcher/login';
-
+const showTabBar = pathname !== '/researcher/login' && 
+                   pathname !== '/researcher/register';
   return (
     <View style={styles.container}>
       <Slot />
@@ -166,7 +166,9 @@ export default function ResearcherLayout() {
   );
 }
 
-if (!isAuthenticated && pathname !== '/researcher/login') {
+if (!isAuthenticated && 
+    pathname !== '/researcher/login' && 
+    pathname !== '/researcher/register') {
   return <RedirectToLogin />;
 }
 

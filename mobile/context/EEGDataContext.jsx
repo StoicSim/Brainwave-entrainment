@@ -18,10 +18,9 @@ export function EEGDataProvider({ children }) {
       const stored = await AsyncStorage.getItem('eegSessions');
       if (stored) {
         setSessions(JSON.parse(stored));
-        console.log('Sessions loaded:', JSON.parse(stored).length);
       }
     } catch (error) {
-      console.error('Error loading sessions:', error);
+      console.warn('Error loading sessions:', error);
     } finally {
       setIsLoading(false);
     }
@@ -31,32 +30,28 @@ export function EEGDataProvider({ children }) {
     try {
       await AsyncStorage.setItem('eegSessions', JSON.stringify(newSessions));
       setSessions(newSessions);
-      console.log('Sessions saved:', newSessions.length);
     } catch (error) {
-      console.error('Error saving sessions:', error);
+      console.warn('Error saving sessions:', error);
     }
   };
 
-  // Save a complete session with combined data points
   const saveSession = async (userProfile, dataPoints, recordingStartTime) => {
     const sessionId = `session_${Date.now()}`;
-    
     const newSession = {
       id: sessionId,
       timestamp: new Date().toISOString(),
       recordingStartTime: recordingStartTime || Date.now(),
       userProfile: {
-        name: userProfile.name,
-        age: userProfile.age,
+        name: userProfile.name || '',
+        age: userProfile.age || '',
+        gender: userProfile.gender || '',
         iaf: userProfile.iafCalibration?.iaf || null,
-        personality: userProfile.personalityTest?.scores || {}
+        personality: userProfile.personalityTest?.scores || {},
       },
-      dataPoints, // Array with both no_music and music data
+      dataPoints,
     };
-    
     const updated = [...sessions, newSession];
     await saveSessions(updated);
-    
     return newSession;
   };
 
@@ -69,95 +64,92 @@ export function EEGDataProvider({ children }) {
     try {
       await AsyncStorage.removeItem('eegSessions');
       setSessions([]);
-      console.log('All sessions cleared');
     } catch (error) {
-      console.error('Error clearing sessions:', error);
+      console.warn('Error clearing sessions:', error);
     }
   };
 
-  // Generate simplified filename: username_sessionid.csv
   const generateFilename = (session) => {
-    const { userProfile, id } = session;
-    const name = (userProfile.name || 'unknown').toLowerCase().replace(/\s+/g, '_');
-    return `${name}_${id}.csv`;
+    const name = (session.userProfile?.name || 'unknown').toLowerCase().replace(/\s+/g, '_');
+    return `${name}_${session.id}.csv`;
   };
 
-  // Generate CSV with metadata columns and absolute timestamps
+  // Safe personality getter — returns 0 if personality data doesn't exist
+  const safePersonality = (userProfile) => {
+    const p = userProfile?.personality || {};
+    return {
+      openness:          p.openmindedness || p.openness || 0,
+      conscientiousness: p.conscientiousness || 0,
+      extraversion:      p.extraversion || 0,
+      agreeableness:     p.agreeableness || 0,
+      neuroticism:       p.negativeemotionality || p.neuroticism || 0,
+    };
+  };
+
   const generateCSV = (session) => {
     const { userProfile, dataPoints } = session;
-    const p = userProfile.personality;
-    
-    // CSV Header with all metadata and data columns
-    let csv = 'Timestamp,Session_ID,Name,Age,IAF,Openness,Conscientiousness,Extraversion,Agreeableness,Neuroticism,';
+    const p = safePersonality(userProfile);
+
+    let csv = 'Timestamp,Session_ID,Name,Age,Gender,IAF,Openness,Conscientiousness,Extraversion,Agreeableness,Neuroticism,';
     csv += 'Session_Type,Music_Link,';
     csv += 'Signal_Quality,Attention,Meditation,';
     csv += 'Delta,Theta,Alpha_Low,Alpha_High,Beta_Low,Beta_High,Gamma_Low,Gamma_High,';
     csv += 'PSD_6Hz,PSD_7Hz,PSD_8Hz,PSD_9Hz,PSD_10Hz,PSD_11Hz,PSD_12Hz,PSD_13Hz,PSD_14Hz\n';
-    
-    // Add each data point as a row with full metadata
+
     if (dataPoints && dataPoints.length > 0) {
       dataPoints.forEach(point => {
         const { timestamp, sessionType, musicLink, bandPowers, psdPoints, metrics } = point;
-        
-        // Timestamp (absolute ISO format)
+
         csv += `${timestamp},`;
-        
-        // Session and User Metadata
         csv += `${session.id},`;
-        csv += `${userProfile.name},`;
-        csv += `${userProfile.age},`;
-        csv += `${userProfile.iaf?.toFixed(2) || 'N/A'},`;
-        csv += `${p.openmindedness || p.openness || 0},`;
-        csv += `${p.conscientiousness || 0},`;
-        csv += `${p.extraversion || 0},`;
-        csv += `${p.agreeableness || 0},`;
-        csv += `${p.negativeemotionality || p.neuroticism || 0},`;
-        
-        // Session Type and Music Link
-        csv += `${sessionType},`;
+        csv += `${userProfile?.name || ''},`;
+        csv += `${userProfile?.age || ''},`;
+        csv += `${userProfile?.gender || ''},`;
+        csv += `${userProfile?.iaf?.toFixed(2) || 'N/A'},`;
+        csv += `${p.openness},`;
+        csv += `${p.conscientiousness},`;
+        csv += `${p.extraversion},`;
+        csv += `${p.agreeableness},`;
+        csv += `${p.neuroticism},`;
+
+        csv += `${sessionType || ''},`;
         csv += `${musicLink || ''},`;
-        
-        // Metrics (Signal Quality, Attention, Meditation)
-        csv += `${metrics.signalQuality || 0},`;
-        csv += `${metrics.attention || 0},`;
-        csv += `${metrics.meditation || 0},`;
-        
-        // 8 Band powers
-        csv += `${bandPowers.Delta?.toExponential(4) || 'N/A'},`;
-        csv += `${bandPowers.Theta?.toExponential(4) || 'N/A'},`;
-        csv += `${bandPowers.AlphaLow?.toExponential(4) || 'N/A'},`;
-        csv += `${bandPowers.AlphaHigh?.toExponential(4) || 'N/A'},`;
-        csv += `${bandPowers.BetaLow?.toExponential(4) || 'N/A'},`;
-        csv += `${bandPowers.BetaHigh?.toExponential(4) || 'N/A'},`;
-        csv += `${bandPowers.GammaLow?.toExponential(4) || 'N/A'},`;
-        csv += `${bandPowers.GammaHigh?.toExponential(4) || 'N/A'},`;
-        
-        // 9 PSD points (6-14 Hz)
+
+        csv += `${metrics?.signalQuality || 0},`;
+        csv += `${metrics?.attention || 0},`;
+        csv += `${metrics?.meditation || 0},`;
+
+        csv += `${bandPowers?.Delta?.toExponential(4) || 'N/A'},`;
+        csv += `${bandPowers?.Theta?.toExponential(4) || 'N/A'},`;
+        csv += `${bandPowers?.AlphaLow?.toExponential(4) || 'N/A'},`;
+        csv += `${bandPowers?.AlphaHigh?.toExponential(4) || 'N/A'},`;
+        csv += `${bandPowers?.BetaLow?.toExponential(4) || 'N/A'},`;
+        csv += `${bandPowers?.BetaHigh?.toExponential(4) || 'N/A'},`;
+        csv += `${bandPowers?.GammaLow?.toExponential(4) || 'N/A'},`;
+        csv += `${bandPowers?.GammaHigh?.toExponential(4) || 'N/A'},`;
+
         for (let freq = 6; freq <= 14; freq++) {
-          const psdKey = `psd_${freq}hz`;
-          csv += `${psdPoints[psdKey]?.toExponential(4) || 'N/A'}`;
+          csv += `${psdPoints?.[`psd_${freq}hz`]?.toExponential(4) || 'N/A'}`;
           if (freq < 14) csv += ',';
         }
         csv += '\n';
       });
     }
-    
+
     return csv;
   };
 
-  // Export session to CSV
   const exportSession = async (sessionOrId) => {
     try {
-      // Handle both session object and session ID
       let session;
       if (typeof sessionOrId === 'string') {
         session = sessions.find(s => s.id === sessionOrId);
       } else {
         session = sessionOrId;
       }
-      
+
       if (!session) {
-        console.error('Session not found');
+        console.warn('Session not found');
         return null;
       }
 
@@ -165,9 +157,7 @@ export function EEGDataProvider({ children }) {
       const filename = generateFilename(session);
       const fileUri = FileSystem.documentDirectory + filename;
 
-      await FileSystem.writeAsStringAsync(fileUri, csv, {
-        encoding: 'utf8',
-      });
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: 'utf8' });
 
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, {
@@ -175,78 +165,67 @@ export function EEGDataProvider({ children }) {
           dialogTitle: 'Export EEG Session Data',
           UTI: 'public.comma-separated-values-text'
         });
-      } else {
-        console.error('Sharing is not available on this device');
-        return null;
       }
 
       return fileUri;
     } catch (error) {
-      console.error('Error exporting CSV:', error);
+      console.warn('Error exporting CSV:', error);
       throw error;
     }
   };
 
-  // Export all sessions into a single combined CSV
-  const exportAllSessions = async () => {
+  const exportAllSessions = async (customSessions) => {
     try {
-      if (sessions.length === 0) {
-        console.error('No sessions to export');
+      const toExport = customSessions || sessions;
+      if (toExport.length === 0) {
+        console.warn('No sessions to export');
         return null;
       }
 
-      // Create a combined CSV with all session data
-      let combinedCSV = 'Timestamp,Session_ID,Name,Age,IAF,Openness,Conscientiousness,Extraversion,Agreeableness,Neuroticism,';
+      let combinedCSV = 'Timestamp,Session_ID,Name,Age,Gender,IAF,Openness,Conscientiousness,Extraversion,Agreeableness,Neuroticism,';
       combinedCSV += 'Session_Type,Music_Link,';
       combinedCSV += 'Signal_Quality,Attention,Meditation,';
       combinedCSV += 'Delta,Theta,Alpha_Low,Alpha_High,Beta_Low,Beta_High,Gamma_Low,Gamma_High,';
       combinedCSV += 'PSD_6Hz,PSD_7Hz,PSD_8Hz,PSD_9Hz,PSD_10Hz,PSD_11Hz,PSD_12Hz,PSD_13Hz,PSD_14Hz\n';
-      
-      sessions.forEach(session => {
+
+      toExport.forEach(session => {
         const { id, userProfile, dataPoints } = session;
-        const p = userProfile.personality;
-        
+        const p = safePersonality(userProfile);
+
         if (dataPoints && dataPoints.length > 0) {
           dataPoints.forEach(point => {
             const { timestamp, sessionType, musicLink, bandPowers, psdPoints, metrics } = point;
-            
-            // Timestamp
+
             combinedCSV += `${timestamp},`;
-            
-            // Session and User Metadata
             combinedCSV += `${id},`;
-            combinedCSV += `${userProfile.name},`;
-            combinedCSV += `${userProfile.age},`;
-            combinedCSV += `${userProfile.iaf?.toFixed(2) || 'N/A'},`;
-            combinedCSV += `${p.openmindedness || p.openness || 0},`;
-            combinedCSV += `${p.conscientiousness || 0},`;
-            combinedCSV += `${p.extraversion || 0},`;
-            combinedCSV += `${p.agreeableness || 0},`;
-            combinedCSV += `${p.negativeemotionality || p.neuroticism || 0},`;
-            
-            // Session Type and Music Link
-            combinedCSV += `${sessionType},`;
+            combinedCSV += `${userProfile?.name || ''},`;
+            combinedCSV += `${userProfile?.age || ''},`;
+            combinedCSV += `${userProfile?.gender || ''},`;
+            combinedCSV += `${userProfile?.iaf?.toFixed(2) || 'N/A'},`;
+            combinedCSV += `${p.openness},`;
+            combinedCSV += `${p.conscientiousness},`;
+            combinedCSV += `${p.extraversion},`;
+            combinedCSV += `${p.agreeableness},`;
+            combinedCSV += `${p.neuroticism},`;
+
+            combinedCSV += `${sessionType || ''},`;
             combinedCSV += `${musicLink || ''},`;
-            
-            // Metrics
-            combinedCSV += `${metrics.signalQuality || 0},`;
-            combinedCSV += `${metrics.attention || 0},`;
-            combinedCSV += `${metrics.meditation || 0},`;
-            
-            // 8 Band powers
-            combinedCSV += `${bandPowers.Delta?.toExponential(4) || 'N/A'},`;
-            combinedCSV += `${bandPowers.Theta?.toExponential(4) || 'N/A'},`;
-            combinedCSV += `${bandPowers.AlphaLow?.toExponential(4) || 'N/A'},`;
-            combinedCSV += `${bandPowers.AlphaHigh?.toExponential(4) || 'N/A'},`;
-            combinedCSV += `${bandPowers.BetaLow?.toExponential(4) || 'N/A'},`;
-            combinedCSV += `${bandPowers.BetaHigh?.toExponential(4) || 'N/A'},`;
-            combinedCSV += `${bandPowers.GammaLow?.toExponential(4) || 'N/A'},`;
-            combinedCSV += `${bandPowers.GammaHigh?.toExponential(4) || 'N/A'},`;
-            
-            // 9 PSD points
+
+            combinedCSV += `${metrics?.signalQuality || 0},`;
+            combinedCSV += `${metrics?.attention || 0},`;
+            combinedCSV += `${metrics?.meditation || 0},`;
+
+            combinedCSV += `${bandPowers?.Delta?.toExponential(4) || 'N/A'},`;
+            combinedCSV += `${bandPowers?.Theta?.toExponential(4) || 'N/A'},`;
+            combinedCSV += `${bandPowers?.AlphaLow?.toExponential(4) || 'N/A'},`;
+            combinedCSV += `${bandPowers?.AlphaHigh?.toExponential(4) || 'N/A'},`;
+            combinedCSV += `${bandPowers?.BetaLow?.toExponential(4) || 'N/A'},`;
+            combinedCSV += `${bandPowers?.BetaHigh?.toExponential(4) || 'N/A'},`;
+            combinedCSV += `${bandPowers?.GammaLow?.toExponential(4) || 'N/A'},`;
+            combinedCSV += `${bandPowers?.GammaHigh?.toExponential(4) || 'N/A'},`;
+
             for (let freq = 6; freq <= 14; freq++) {
-              const psdKey = `psd_${freq}hz`;
-              combinedCSV += `${psdPoints[psdKey]?.toExponential(4) || 'N/A'}`;
+              combinedCSV += `${psdPoints?.[`psd_${freq}hz`]?.toExponential(4) || 'N/A'}`;
               if (freq < 14) combinedCSV += ',';
             }
             combinedCSV += '\n';
@@ -254,13 +233,10 @@ export function EEGDataProvider({ children }) {
         }
       });
 
-      const timestamp = Date.now();
-      const filename = `eeg_all_sessions_${timestamp}.csv`;
+      const filename = `eeg_all_sessions_${Date.now()}.csv`;
       const fileUri = FileSystem.documentDirectory + filename;
 
-      await FileSystem.writeAsStringAsync(fileUri, combinedCSV, {
-        encoding: 'utf8',
-      });
+      await FileSystem.writeAsStringAsync(fileUri, combinedCSV, { encoding: 'utf8' });
 
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, {
@@ -272,20 +248,20 @@ export function EEGDataProvider({ children }) {
 
       return fileUri;
     } catch (error) {
-      console.error('Error exporting all sessions:', error);
+      console.warn('Error exporting all sessions:', error);
       throw error;
     }
   };
 
   return (
-    <EEGDataContext.Provider value={{ 
+    <EEGDataContext.Provider value={{
       sessions,
       isLoading,
       saveSession,
       deleteSession,
       clearAllSessions,
       exportSession,
-      exportAllSessions
+      exportAllSessions,
     }}>
       {children}
     </EEGDataContext.Provider>
@@ -294,8 +270,6 @@ export function EEGDataProvider({ children }) {
 
 export const useEEGData = () => {
   const context = useContext(EEGDataContext);
-  if (!context) {
-    throw new Error('useEEGData must be used within EEGDataProvider');
-  }
+  if (!context) throw new Error('useEEGData must be used within EEGDataProvider');
   return context;
 };

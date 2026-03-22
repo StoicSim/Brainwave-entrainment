@@ -1,46 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView,
-  TextInput, StyleSheet, Alert
+  TextInput, StyleSheet, Alert, ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useUserProfile } from '../../context/UserProfileContext';
 import { useBleContext } from '../../context/BleContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const AUTH_KEY = 'researcher_logged_in';
+import {
+  getCurrentUser,
+  updateCurrentUserProfile,
+  logoutResearcher
+} from '../../utils/ResearcherAuth';
 
 export default function ResearcherProfileScreen() {
   const router = useRouter();
-  const { userProfile, updateProfile, resetProfile } = useUserProfile();
   const { device, handleDisconnect } = useBleContext();
 
-  const [name, setName] = useState(userProfile.name);
-  const [age, setAge] = useState(userProfile.age);
-  const [gender, setGender] = useState(userProfile.gender);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [gender, setGender] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    updateProfile({ name, age, gender });
-    Alert.alert('Success', 'Profile saved successfully!');
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const user = await getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+        setName(user.name || '');
+        setAge(user.age || '');
+        setGender(user.gender || '');
+      }
+    } catch (error) {
+      console.warn('loadProfile error:', error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleReset = () => {
-    Alert.alert(
-      'Reset Profile',
-      'Are you sure you want to reset all profile data? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: () => {
-            resetProfile();
-            Alert.alert('Profile Reset', 'All data has been cleared.');
-          }
-        }
-      ]
-    );
+  const handleSave = async () => {
+    setIsSaving(true);
+    const result = await updateCurrentUserProfile({ name, age, gender });
+    setIsSaving(false);
+    if (result.success) {
+      setCurrentUser(prev => ({ ...prev, name, age, gender }));
+      Alert.alert('Saved', 'Profile updated successfully!');
+    } else {
+      Alert.alert('Error', result.error);
+    }
   };
 
   const handleLogout = () => {
@@ -54,11 +66,8 @@ export default function ResearcherProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Disconnect BLE if connected
               if (device) await handleDisconnect();
-              // Clear auth
-              await AsyncStorage.removeItem(AUTH_KEY);
-              // Go back to mode selection
+              await logoutResearcher();
               router.replace('/');
             } catch (error) {
               console.warn('Logout error:', error.message);
@@ -70,6 +79,16 @@ export default function ResearcherProfileScreen() {
     );
   };
 
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196F3" />
+      </View>
+    );
+  }
+
+  const isProfileComplete = name && age && gender;
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -78,7 +97,6 @@ export default function ResearcherProfileScreen() {
           <Ionicons name="person-circle-outline" size={24} color="#fff" style={styles.headerIcon} />
           <Text style={styles.headerTitle}>Researcher Profile</Text>
         </View>
-        {/* Logout button in header */}
         <TouchableOpacity style={styles.logoutHeaderButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={22} color="#fff" />
         </TouchableOpacity>
@@ -86,11 +104,14 @@ export default function ResearcherProfileScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
 
-        {/* Researcher badge */}
+        {/* Logged in as badge */}
         <View style={styles.researcherBadge}>
           <Ionicons name="flask-outline" size={18} color="#1565C0" />
           <Text style={styles.researcherBadgeText}>
-            Logged in as Researcher
+            Logged in as{' '}
+            <Text style={styles.researcherUsername}>
+              @{currentUser?.username || 'unknown'}
+            </Text>
           </Text>
         </View>
 
@@ -132,38 +153,48 @@ export default function ResearcherProfileScreen() {
             ))}
           </View>
 
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveButtonText}>{'💾 Save Basic Info'}</Text>
+          <TouchableOpacity
+            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+            onPress={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.saveButtonText}>💾 Save Profile</Text>
+            )}
           </TouchableOpacity>
         </View>
 
-        {/* Profile Status */}
+        {/* Account Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Profile Status</Text>
-          <View style={[
-            styles.statusCard,
-            userProfile.name && userProfile.age && userProfile.gender && styles.statusCardComplete
-          ]}>
-            <Text style={styles.statusIcon}>
-              {userProfile.name && userProfile.age && userProfile.gender ? '✅' : '⚠️'}
+          <Text style={styles.sectionTitle}>Account Info</Text>
+          <View style={styles.accountRow}>
+            <Ionicons name="person-outline" size={18} color="#666" />
+            <Text style={styles.accountLabel}>Username</Text>
+            <Text style={styles.accountValue}>@{currentUser?.username}</Text>
+          </View>
+          <View style={styles.accountRow}>
+            <Ionicons name="calendar-outline" size={18} color="#666" />
+            <Text style={styles.accountLabel}>Joined</Text>
+            <Text style={styles.accountValue}>
+              {currentUser?.createdAt
+                ? new Date(currentUser.createdAt).toLocaleDateString()
+                : 'N/A'}
             </Text>
+          </View>
+          <View style={[styles.statusCard, isProfileComplete && styles.statusCardComplete]}>
+            <Text style={styles.statusIcon}>{isProfileComplete ? '✅' : '⚠️'}</Text>
             <View style={styles.statusInfo}>
               <Text style={styles.statusText}>
-                {userProfile.name && userProfile.age && userProfile.gender
-                  ? 'Profile Complete'
-                  : 'Profile Incomplete — Fill in your details'}
+                {isProfileComplete ? 'Profile Complete' : 'Profile Incomplete — Fill in your details'}
               </Text>
               <Text style={styles.statusItem}>
-                {`${userProfile.name && userProfile.age && userProfile.gender ? '✓' : '○'} Basic Info`}
+                {`${name ? '✓' : '○'} Name   ${age ? '✓' : '○'} Age   ${gender ? '✓' : '○'} Gender`}
               </Text>
             </View>
           </View>
         </View>
-
-        {/* Reset Button */}
-        <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-          <Text style={styles.resetButtonText}>{'🗑️ Reset All Data'}</Text>
-        </TouchableOpacity>
 
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -178,6 +209,12 @@ export default function ResearcherProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -235,6 +272,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1565C0',
     fontWeight: '600',
+  },
+  researcherUsername: {
+    fontWeight: 'bold',
+    color: '#0D47A1',
   },
   section: {
     backgroundColor: '#fff',
@@ -302,10 +343,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
+  saveButtonDisabled: {
+    backgroundColor: '#90CAF9',
+  },
   saveButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    marginBottom: 4,
+  },
+  accountLabel: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  accountValue: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
   },
   statusCard: {
     flexDirection: 'row',
@@ -315,45 +378,29 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#FFB74D',
+    marginTop: 14,
   },
   statusCardComplete: {
     backgroundColor: '#E3F2FD',
     borderColor: '#2196F3',
   },
   statusIcon: {
-    fontSize: 36,
-    marginRight: 15,
+    fontSize: 32,
+    marginRight: 14,
   },
   statusInfo: {
     flex: 1,
   },
   statusText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#333',
     marginBottom: 6,
   },
   statusItem: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
     fontWeight: '500',
-  },
-  resetButton: {
-    backgroundColor: '#F44336',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
-  resetButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
   },
   logoutButton: {
     backgroundColor: '#37474F',
