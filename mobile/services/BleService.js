@@ -117,7 +117,7 @@ export const connectAndMonitor = async (device, onDataReceived) => {
       BLE_CONFIG.DATA_CHARACTERISTIC_UUID,
       (error, characteristic) => {
         if (error) {
-          console.error('Monitoring error:', error);
+          console.warn('Monitoring error:', error);
           return;
         }
 

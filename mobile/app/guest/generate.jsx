@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator, Alert, TextInput
+  StyleSheet, ActivityIndicator, Alert
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useBleContext } from '../../context/BleContext';
 import { GENERATE_ENDPOINT, HEALTH_ENDPOINT } from '../../constants/ApiConfig';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Buffer } from 'buffer';
+
 const PRESETS = [
   { label: 'Calm', emoji: '🌊', prompt: 'calm, peaceful and relaxing ambient music with soft tones' },
   { label: 'Focus', emoji: '🎯', prompt: 'gentle focus music with light melody, no distractions' },
@@ -16,33 +16,45 @@ const PRESETS = [
   { label: 'Nature', emoji: '🌿', prompt: 'nature inspired ambient music with soft flowing sounds' },
 ];
 
+const TOTAL_TOKENS = 18000; // Fixed at ~2 mins
+
 export default function GenerateScreen() {
   const { device, metrics } = useBleContext();
 
   const [selectedPreset, setSelectedPreset] = useState(null);
-  const [customPrompt, setCustomPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
-  const [backendOnline, setBackendOnline] = useState(null); // null=unknown, true, false
+  const [backendOnline, setBackendOnline] = useState(null);
   const [generationTime, setGenerationTime] = useState(null);
-  const [totalTokens, setTotalTokens] = useState(4500);
+  const [elapsed, setElapsed] = useState(0);
 
   const soundRef = useRef(null);
   const timerRef = useRef(null);
-  const elapsedRef = useRef(0);
 
-  // Check backend health on mount
   useEffect(() => {
     checkBackendHealth();
-    return () => {
-      cleanup();
-    };
+    return () => { cleanup(); };
   }, []);
+
+  // Tick elapsed timer every second while generating
+  useEffect(() => {
+    if (isGenerating) {
+      setElapsed(0);
+      timerRef.current = setInterval(() => {
+        setElapsed(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isGenerating]);
 
   const checkBackendHealth = async () => {
     try {
-      const response = await fetch(HEALTH_ENDPOINT, { 
+      const response = await fetch(HEALTH_ENDPOINT, {
         method: 'GET',
         headers: { 'ngrok-skip-browser-warning': 'true' }
       });
@@ -61,16 +73,9 @@ export default function GenerateScreen() {
     }
   };
 
-  const getActivePrompt = () => {
-    if (customPrompt.trim()) return customPrompt.trim();
-    if (selectedPreset !== null) return PRESETS[selectedPreset].prompt;
-    return null;
-  };
-
   const handleGenerate = async () => {
-    const prompt = getActivePrompt();
-    if (!prompt) {
-      Alert.alert('Select a Style', 'Please select a music style or enter a custom prompt.');
+    if (selectedPreset === null) {
+      Alert.alert('Select a Style', 'Please select a music style to generate.');
       return;
     }
 
@@ -83,43 +88,24 @@ export default function GenerateScreen() {
       return;
     }
 
-    // Cleanup previous audio
     await cleanup();
     setAudioReady(false);
     setIsGenerating(true);
     setGenerationTime(null);
-    elapsedRef.current = 0;
-
-    // Start elapsed timer
-    timerRef.current = setInterval(() => {
-      elapsedRef.current += 1;
-    }, 1000);
 
     try {
-      const url = `${GENERATE_ENDPOINT}?prompt=${encodeURIComponent(prompt)}&total_tokens=${totalTokens}&chunk_tokens=512&temperature=1.0&top_k=200`;
+      const prompt = PRESETS[selectedPreset].prompt;
+      const url = `${GENERATE_ENDPOINT}?prompt=${encodeURIComponent(prompt)}&total_tokens=${TOTAL_TOKENS}&chunk_tokens=512&temperature=1.0&top_k=200`;
+      const tempUri = `${FileSystem.cacheDirectory}generated_${Date.now()}.wav`;
 
-      const response = await fetch(url, {
-        method: 'GET',
+      const downloadResult = await FileSystem.downloadAsync(url, tempUri, {
         headers: { 'ngrok-skip-browser-warning': 'true' }
       });
 
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
+      if (downloadResult.status !== 200) {
+        throw new Error(`Server error: ${downloadResult.status}`);
       }
 
-      // Get the audio blob
-      const tempUri = `${FileSystem.cacheDirectory}generated_${Date.now()}.wav`;
-      const arrayBuffer = await response.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      
-      // Convert to base64 in chunks to avoid stack overflow on large files
-      // Convert to base64 using Buffer to avoid encoding issues
-      const base64 = Buffer.from(uint8Array).toString('base64');
-      
-      await FileSystem.writeAsStringAsync(tempUri, base64, {
-        encoding: 'base64',
-      });
-      // Load into expo-av
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: true,
@@ -133,13 +119,11 @@ export default function GenerateScreen() {
       );
 
       sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          setIsPlaying(false);
-        }
+        if (status.didJustFinish) setIsPlaying(false);
       });
 
       soundRef.current = sound;
-      setGenerationTime(elapsedRef.current);
+      setGenerationTime(elapsed);
       setAudioReady(true);
 
     } catch (error) {
@@ -150,7 +134,6 @@ export default function GenerateScreen() {
         [{ text: 'OK' }]
       );
     } finally {
-      if (timerRef.current) clearInterval(timerRef.current);
       setIsGenerating(false);
     }
   };
@@ -179,28 +162,30 @@ export default function GenerateScreen() {
     handleGenerate();
   };
 
-  const approximateDuration = Math.round((totalTokens / 9000) * 60);
-
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Generate Music</Text>
         <View style={styles.headerRight}>
-          {/* Backend status */}
           <View style={[
             styles.statusDot,
-            { backgroundColor: backendOnline === true ? '#4CAF50' : backendOnline === false ? '#F44336' : '#FF9800' }
+            {
+              backgroundColor:
+                backendOnline === true ? '#4CAF50' :
+                backendOnline === false ? '#F44336' : '#FF9800'
+            }
           ]} />
           <Text style={styles.statusText}>
-            {backendOnline === true ? 'AI Online' : backendOnline === false ? 'AI Offline' : 'Checking...'}
+            {backendOnline === true ? 'AI Online' :
+             backendOnline === false ? 'AI Offline' : 'Checking...'}
           </Text>
         </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* EEG Status (if connected) */}
+        {/* EEG Status */}
         {device && (
           <View style={styles.eegBanner}>
             <Ionicons name="pulse" size={16} color="#4CAF50" />
@@ -213,6 +198,9 @@ export default function GenerateScreen() {
         {/* Style Presets */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Choose a Style</Text>
+          <Text style={styles.sectionSubtitle}>
+            Select the type of music you want to generate
+          </Text>
           <View style={styles.presetsGrid}>
             {PRESETS.map((preset, index) => (
               <TouchableOpacity
@@ -220,13 +208,10 @@ export default function GenerateScreen() {
                 style={[
                   styles.presetCard,
                   selectedPreset === index && styles.presetCardActive,
-                  customPrompt.trim() && styles.presetCardDisabled
+                  isGenerating && styles.presetCardDisabled
                 ]}
-                onPress={() => {
-                  setSelectedPreset(selectedPreset === index ? null : index);
-                  setCustomPrompt('');
-                }}
-                disabled={!!customPrompt.trim()}
+                onPress={() => setSelectedPreset(selectedPreset === index ? null : index)}
+                disabled={isGenerating}
               >
                 <Text style={styles.presetEmoji}>{preset.emoji}</Text>
                 <Text style={[
@@ -235,48 +220,22 @@ export default function GenerateScreen() {
                 ]}>
                   {preset.label}
                 </Text>
+                {selectedPreset === index && (
+                  <View style={styles.presetCheck}>
+                    <Ionicons name="checkmark" size={12} color="#fff" />
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {/* Custom Prompt */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Or Describe Your Own</Text>
-          <TextInput
-            style={[styles.promptInput, selectedPreset !== null && styles.promptInputDisabled]}
-            placeholder="e.g. soft piano with slow rhythm..."
-            placeholderTextColor="#bbb"
-            value={customPrompt}
-            onChangeText={(text) => {
-              setCustomPrompt(text);
-              if (text.trim()) setSelectedPreset(null);
-            }}
-            multiline
-            numberOfLines={3}
-            editable={selectedPreset === null}
-          />
-        </View>
-
-        {/* Duration Selector */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{`Approximate Duration: ~${approximateDuration}s`}</Text>
-          <View style={styles.durationRow}>
-            {[2250, 4500, 9000, 18000].map((tokens) => (
-              <TouchableOpacity
-                key={tokens}
-                style={[styles.durationButton, totalTokens === tokens && styles.durationButtonActive]}
-                onPress={() => setTotalTokens(tokens)}
-              >
-                <Text style={[
-                  styles.durationButtonText,
-                  totalTokens === tokens && styles.durationButtonTextActive
-                ]}>
-                  {`~${Math.round((tokens / 9000) * 60)}s`}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+        {/* Duration info */}
+        <View style={styles.durationInfo}>
+          <Ionicons name="time-outline" size={16} color="#888" />
+          <Text style={styles.durationInfoText}>
+            Generates approximately 2 minutes of music
+          </Text>
         </View>
 
         {/* Generate Button */}
@@ -285,10 +244,10 @@ export default function GenerateScreen() {
             <TouchableOpacity
               style={[
                 styles.generateButton,
-                (!getActivePrompt() || backendOnline === false) && styles.generateButtonDisabled
+                (selectedPreset === null || backendOnline === false) && styles.generateButtonDisabled
               ]}
               onPress={handleGenerate}
-              disabled={!getActivePrompt() || backendOnline === false || isGenerating}
+              disabled={selectedPreset === null || backendOnline === false}
             >
               <Ionicons name="musical-notes" size={24} color="#fff" />
               <Text style={styles.generateButtonText}>Generate Music</Text>
@@ -298,8 +257,12 @@ export default function GenerateScreen() {
               <ActivityIndicator size="large" color="#4CAF50" />
               <Text style={styles.generatingTitle}>Generating your music...</Text>
               <Text style={styles.generatingSubtext}>
-                This may take 30–90 seconds depending on duration
+                This takes about 2 minutes — please keep the app open
               </Text>
+              <View style={styles.timerBadge}>
+                <Ionicons name="time-outline" size={14} color="#4CAF50" />
+                <Text style={styles.timerText}>{`${elapsed}s elapsed`}</Text>
+              </View>
             </View>
           )}
         </View>
@@ -308,25 +271,34 @@ export default function GenerateScreen() {
         {audioReady && (
           <View style={styles.playerCard}>
             <View style={styles.playerHeader}>
-              <Ionicons name="musical-note" size={20} color="#4CAF50" />
-              <Text style={styles.playerTitle}>
-                {selectedPreset !== null ? `${PRESETS[selectedPreset].emoji} ${PRESETS[selectedPreset].label}` : '🎵 Custom'}
+              <Text style={styles.playerEmoji}>
+                {PRESETS[selectedPreset]?.emoji ?? '🎵'}
               </Text>
-              {generationTime && (
-                <Text style={styles.playerSubtext}>{`Generated in ${generationTime}s`}</Text>
-              )}
+              <View style={styles.playerInfo}>
+                <Text style={styles.playerTitle}>
+                  {PRESETS[selectedPreset]?.label ?? 'Generated Music'}
+                </Text>
+                <Text style={styles.playerSubtext}>
+                  {generationTime ? `Generated in ${generationTime}s` : 'Ready to play'}
+                </Text>
+              </View>
+              <View style={styles.playerReadyBadge}>
+                <Text style={styles.playerReadyText}>~2 min</Text>
+              </View>
             </View>
 
             {/* Waveform placeholder */}
             <View style={styles.waveform}>
-              {Array.from({ length: 30 }).map((_, i) => (
+              {Array.from({ length: 40 }).map((_, i) => (
                 <View
                   key={i}
                   style={[
                     styles.waveformBar,
                     {
-                      height: Math.random() * 30 + 10,
-                      backgroundColor: isPlaying ? '#4CAF50' : '#ccc'
+                      height: Math.random() * 35 + 8,
+                      backgroundColor: isPlaying
+                        ? `rgba(76, 175, 80, ${0.4 + Math.random() * 0.6})`
+                        : '#ddd'
                     }
                   ]}
                 />
@@ -335,35 +307,26 @@ export default function GenerateScreen() {
 
             {/* Controls */}
             <View style={styles.playerControls}>
-              <TouchableOpacity
-                style={styles.playerButton}
-                onPress={handleStop}
-              >
-                <Ionicons name="stop" size={28} color="#666" />
+              <TouchableOpacity style={styles.playerButton} onPress={handleStop}>
+                <Ionicons name="stop" size={26} color="#666" />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.playPauseButton}
-                onPress={handlePlayPause}
-              >
+              <TouchableOpacity style={styles.playPauseButton} onPress={handlePlayPause}>
                 <Ionicons
                   name={isPlaying ? 'pause' : 'play'}
-                  size={36}
+                  size={34}
                   color="#fff"
                 />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.playerButton}
-                onPress={handleRegenerate}
-              >
-                <Ionicons name="refresh" size={28} color="#666" />
+              <TouchableOpacity style={styles.playerButton} onPress={handleRegenerate}>
+                <Ionicons name="refresh" size={26} color="#666" />
               </TouchableOpacity>
             </View>
           </View>
         )}
 
-        {/* Offline retry */}
+        {/* Offline Card */}
         {backendOnline === false && (
           <View style={styles.offlineCard}>
             <Text style={styles.offlineIcon}>⚠️</Text>
@@ -442,83 +405,75 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: '#333',
-    marginBottom: 12,
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: '#999',
+    marginBottom: 16,
   },
   presetsGrid: {
     flexDirection: 'row',
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 12,
   },
   presetCard: {
-    flex: 1,
+    width: '47%',
     backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 16,
+    padding: 20,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#e0e0e0',
     elevation: 1,
-    gap: 6,
+    gap: 8,
+    position: 'relative',
   },
   presetCardActive: {
     borderColor: '#4CAF50',
     backgroundColor: '#E8F5E9',
+    elevation: 3,
   },
   presetCardDisabled: {
-    opacity: 0.4,
+    opacity: 0.5,
   },
   presetEmoji: {
-    fontSize: 28,
+    fontSize: 36,
   },
   presetLabel: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#666',
+    color: '#555',
   },
   presetLabelActive: {
     color: '#2E7D32',
+    fontWeight: '700',
   },
-  promptInput: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 14,
-    color: '#333',
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  promptInputDisabled: {
-    opacity: 0.4,
-    backgroundColor: '#f9f9f9',
-  },
-  durationRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  durationButton: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
+  presetCheck: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 20,
+    height: 20,
     borderRadius: 10,
-    padding: 12,
+    backgroundColor: '#4CAF50',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  durationButtonActive: {
-    borderColor: '#4CAF50',
-    backgroundColor: '#E8F5E9',
+  durationInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 15,
+    paddingBottom: 5,
   },
-  durationButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#666',
-  },
-  durationButtonTextActive: {
-    color: '#2E7D32',
+  durationInfoText: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
   },
   generateButton: {
     backgroundColor: '#4CAF50',
@@ -560,6 +515,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#999',
     textAlign: 'center',
+    lineHeight: 20,
+  },
+  timerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 4,
+  },
+  timerText: {
+    fontSize: 13,
+    color: '#4CAF50',
+    fontWeight: '600',
   },
   playerCard: {
     backgroundColor: '#fff',
@@ -576,34 +547,51 @@ const styles = StyleSheet.create({
   playerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+  },
+  playerEmoji: {
+    fontSize: 36,
+  },
+  playerInfo: {
+    flex: 1,
   },
   playerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: '#333',
-    flex: 1,
   },
   playerSubtext: {
     fontSize: 12,
     color: '#999',
+    marginTop: 2,
+  },
+  playerReadyBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  playerReadyText: {
+    fontSize: 12,
+    color: '#2E7D32',
+    fontWeight: '600',
   },
   waveform: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 50,
+    height: 55,
     paddingHorizontal: 4,
   },
   waveformBar: {
-    width: 4,
-    borderRadius: 2,
+    width: 5,
+    borderRadius: 3,
   },
   playerControls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
+    gap: 24,
   },
   playerButton: {
     width: 52,
@@ -614,9 +602,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playPauseButton: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: '#4CAF50',
     alignItems: 'center',
     justifyContent: 'center',
