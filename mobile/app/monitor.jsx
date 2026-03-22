@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
 import { useBleContext } from '../context/BleContext';
 
 export default function MonitorScreen() {
@@ -12,6 +12,7 @@ export default function MonitorScreen() {
     hasBandData,
     handleConnect,
     handleDisconnect,
+    cancelConnection,
     getStatusColor,
   } = useBleContext();
 
@@ -19,17 +20,55 @@ export default function MonitorScreen() {
 
   const handleDoubleTap = () => {
     const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300; // milliseconds
-
+    const DOUBLE_TAP_DELAY = 300;
     if (lastTap.current && (now - lastTap.current) < DOUBLE_TAP_DELAY) {
-      // Double tap detected
-      if (global.toggleTabBarUI) {
-        global.toggleTabBarUI();
-      }
+      if (global.toggleTabBarUI) global.toggleTabBarUI();
       lastTap.current = null;
     } else {
       lastTap.current = now;
     }
+  };
+
+  const renderConnectionButtons = () => {
+    if (isConnecting) {
+      // While connecting — show scanning indicator and cancel button
+      return (
+        <View style={styles.connectingContainer}>
+          <View style={styles.connectingStatus}>
+            <ActivityIndicator size="small" color="#2196F3" />
+            <Text style={styles.connectingText}>{status}</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.button, styles.cancelButton]}
+            onPress={cancelConnection}
+          >
+            <Text style={styles.buttonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (device) {
+      // Connected — show disconnect button only
+      return (
+        <TouchableOpacity
+          style={[styles.button, styles.disconnectButton]}
+          onPress={handleDisconnect}
+        >
+          <Text style={styles.buttonText}>Disconnect</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    // Disconnected — show connect button only
+    return (
+      <TouchableOpacity
+        style={[styles.button, styles.connectButton]}
+        onPress={handleConnect}
+      >
+        <Text style={styles.buttonText}>Connect to Device</Text>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -44,36 +83,16 @@ export default function MonitorScreen() {
           </View>
         </View>
 
-        <ScrollView 
-          style={styles.content} 
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <TouchableWithoutFeedback onPress={handleDoubleTap}>
             <View>
+              {/* Connection Section */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Device Connection</Text>
-                <View style={styles.controls}>
-                  <TouchableOpacity
-                    style={[styles.button, styles.connectButton, (isConnecting || device !== null) && styles.buttonDisabled]}
-                    onPress={handleConnect}
-                    disabled={isConnecting || device !== null}
-                  >
-                    <Text style={styles.buttonText}>
-                      {device ? '✓ Connected' : 'Connect to Device'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.button, styles.disconnectButton, !device && styles.buttonDisabled]}
-                    onPress={handleDisconnect}
-                    disabled={!device}
-                  >
-                    <Text style={styles.buttonText}>Disconnect</Text>
-                  </TouchableOpacity>
-                </View>
+                {renderConnectionButtons()}
               </View>
 
-              {!device ? (
+              {!device && !isConnecting ? (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyIcon}>🔌</Text>
                   <Text style={styles.emptyTitle}>No Device Connected</Text>
@@ -81,6 +100,17 @@ export default function MonitorScreen() {
                     Connect your EEG headset to start monitoring your brainwaves
                   </Text>
                   <Text style={styles.emptySubtext}>Double-tap anywhere to toggle UI</Text>
+                </View>
+              ) : !device && isConnecting ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyIcon}>📡</Text>
+                  <Text style={styles.emptyTitle}>Searching for Device</Text>
+                  <Text style={styles.emptyText}>
+                    Make sure your EEG headset is powered on and nearby.
+                  </Text>
+                  <Text style={styles.emptySubtext}>
+                    Tap Cancel above to stop and try again.
+                  </Text>
                 </View>
               ) : (
                 <>
@@ -90,7 +120,7 @@ export default function MonitorScreen() {
                       <View style={styles.warningTextContainer}>
                         <Text style={styles.warningTitle}>Poor Signal Quality</Text>
                         <Text style={styles.warningText}>
-                          {metrics.poorSignal === 200 
+                          {metrics.poorSignal === 200
                             ? 'No sensor contact - Adjust headset placement'
                             : 'Weak signal - Ensure sensors touch skin firmly'}
                         </Text>
@@ -110,14 +140,14 @@ export default function MonitorScreen() {
                         ]}>
                           {metrics.poorSignal < 50 ? 'Good' : metrics.poorSignal < 100 ? 'Fair' : 'Poor'}
                         </Text>
-                        <Text style={styles.metricSubtext}>({metrics.poorSignal}/200)</Text>
+                        <Text style={styles.metricSubtext}>{`(${metrics.poorSignal}/200)`}</Text>
                       </View>
 
                       <View style={[styles.metricCard, metrics.poorSignal > 50 && styles.metricCardDisabled]}>
                         <Text style={styles.metricIcon}>🎯</Text>
                         <Text style={styles.metricLabel}>Attention</Text>
                         <Text style={[styles.metricValue, metrics.poorSignal > 50 && styles.metricDisabled]}>
-                          {metrics.attention}
+                          {`${metrics.attention}`}
                         </Text>
                         <Text style={styles.metricSubtext}>
                           {metrics.poorSignal > 50 ? 'Need good signal' : 'eSense'}
@@ -128,7 +158,7 @@ export default function MonitorScreen() {
                         <Text style={styles.metricIcon}>🧘</Text>
                         <Text style={styles.metricLabel}>Meditation</Text>
                         <Text style={[styles.metricValue, metrics.poorSignal > 50 && styles.metricDisabled]}>
-                          {metrics.meditation}
+                          {`${metrics.meditation}`}
                         </Text>
                         <Text style={styles.metricSubtext}>
                           {metrics.poorSignal > 50 ? 'Need good signal' : 'eSense'}
@@ -138,7 +168,7 @@ export default function MonitorScreen() {
                       <View style={styles.metricCard}>
                         <Text style={styles.metricIcon}>📊</Text>
                         <Text style={styles.metricLabel}>Data Points</Text>
-                        <Text style={styles.metricValue}>{dataCountRef.current}</Text>
+                        <Text style={styles.metricValue}>{`${dataCountRef.current}`}</Text>
                         <Text style={styles.metricSubtext}>
                           {hasBandData() ? '✓ Bands' : 'Raw only'}
                         </Text>
@@ -155,7 +185,7 @@ export default function MonitorScreen() {
                       </View>
                       <View style={styles.infoRow}>
                         <Text style={styles.infoLabel}>Packets Received:</Text>
-                        <Text style={styles.infoValue}>{dataCountRef.current}</Text>
+                        <Text style={styles.infoValue}>{`${dataCountRef.current}`}</Text>
                       </View>
                       <View style={styles.infoRow}>
                         <Text style={styles.infoLabel}>Band Data:</Text>
@@ -224,12 +254,24 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 15,
   },
-  controls: {
-    flexDirection: 'row',
+  connectingContainer: {
     gap: 10,
   },
-  button: {
+  connectingStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    padding: 15,
+    borderRadius: 10,
+    gap: 12,
+  },
+  connectingText: {
+    fontSize: 14,
+    color: '#1976D2',
+    fontWeight: '600',
     flex: 1,
+  },
+  button: {
     padding: 15,
     borderRadius: 10,
     alignItems: 'center',
@@ -241,9 +283,8 @@ const styles = StyleSheet.create({
   disconnectButton: {
     backgroundColor: '#F44336',
   },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
-    opacity: 0.6,
+  cancelButton: {
+    backgroundColor: '#FF9800',
   },
   buttonText: {
     color: '#fff',

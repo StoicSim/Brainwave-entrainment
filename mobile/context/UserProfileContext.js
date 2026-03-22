@@ -10,16 +10,6 @@ const EMPTY_PROFILE = {
   name: '',
   age: '',
   gender: '',
-  personalityTest: {
-    completed: false,
-    timestamp: null,
-    scores: {}
-  },
-  iafCalibration: {
-    completed: false,
-    timestamp: null,
-    iaf: null
-  }
 };
 
 export function UserProfileProvider({ children }) {
@@ -34,15 +24,12 @@ export function UserProfileProvider({ children }) {
     try {
       console.log('🔍 Fetching user data from backend...');
       
-      // Fetch from backend
       const response = await fetch(`${API_BASE_URL}/user/user_001`);
       
       if (response.ok) {
         const data = await response.json();
         setUserProfile(data);
         console.log('✅ User data fetched from backend:', data);
-        
-        // Save to local storage as backup
         await AsyncStorage.setItem('userProfile', JSON.stringify(data));
       } else {
         throw new Error('Failed to fetch from backend');
@@ -51,7 +38,6 @@ export function UserProfileProvider({ children }) {
     } catch (error) {
       console.log('⚠️ Backend fetch failed, trying local storage...');
       
-      // Fallback to local storage
       const stored = await AsyncStorage.getItem('userProfile');
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -77,22 +63,12 @@ export function UserProfileProvider({ children }) {
 
   const updateProfile = (updates) => {
     const updated = { ...userProfile, ...updates };
-    updated.profileComplete = 
-      updated.name && 
-      updated.age && 
-      updated.gender &&
-      updated.personalityTest.completed &&
-      updated.iafCalibration.completed;
+    updated.profileComplete = !!(updated.name && updated.age && updated.gender);
     saveProfile(updated);
   };
 
   const isSetupComplete = () => {
-    return userProfile.profileComplete ||
-           (userProfile.name && 
-            userProfile.age && 
-            userProfile.gender &&
-            userProfile.personalityTest.completed &&
-            userProfile.iafCalibration.completed);
+    return !!(userProfile.profileComplete || (userProfile.name && userProfile.age && userProfile.gender));
   };
 
   const resetProfile = async () => {

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BleProvider } from '../context/BleContext';
 import { UserProfileProvider } from '../context/UserProfileContext';
 import { ResearchSessionProvider } from '../context/ResearchSessionContext';
-import { EEGDataProvider } from '../context/EEGDataContext'; // ADD THIS
+import { EEGDataProvider } from '../context/EEGDataContext';
 
 function LayoutContent() {
   const router = useRouter();
@@ -13,43 +13,30 @@ function LayoutContent() {
   const tabBarAnim = useRef(new Animated.Value(0)).current;
   const isUIVisible = useRef(true);
 
-  const showTabBar = pathname === '/monitor' || pathname === '/charts' || pathname === '/analysis';
+  const showTabBar = pathname === '/monitor' || pathname === '/charts' || pathname === '/record';
 
-  // Reset UI visibility when pathname changes
   useEffect(() => {
     if (showTabBar && !isUIVisible.current) {
       isUIVisible.current = true;
-      
       Animated.timing(tabBarAnim, {
         toValue: 0,
         duration: 250,
         useNativeDriver: true,
       }).start();
-
-      // Notify child screens about UI reset
-      if (global.onUIToggle) {
-        global.onUIToggle(true);
-      }
+      if (global.onUIToggle) global.onUIToggle(true);
     }
   }, [pathname]);
 
-  // Function to toggle UI visibility (called from child screens)
   const toggleUI = () => {
     isUIVisible.current = !isUIVisible.current;
-    
     Animated.timing(tabBarAnim, {
       toValue: isUIVisible.current ? 0 : 100,
       duration: 250,
       useNativeDriver: true,
     }).start();
-
-    // Notify child screens about UI toggle
-    if (global.onUIToggle) {
-      global.onUIToggle(isUIVisible.current);
-    }
+    if (global.onUIToggle) global.onUIToggle(isUIVisible.current);
   };
 
-  // Expose toggle function globally so child screens can call it
   useEffect(() => {
     global.toggleTabBarUI = toggleUI;
     global.isUIVisible = isUIVisible;
@@ -65,14 +52,8 @@ function LayoutContent() {
       
       {showTabBar && (
         <Animated.View 
-          style={[
-            styles.tabBar,
-            {
-              transform: [{ translateY: tabBarAnim }]
-            }
-          ]}
+          style={[styles.tabBar, { transform: [{ translateY: tabBarAnim }] }]}
         >
-          {/* Home Button */}
           <TouchableOpacity 
             style={styles.tabButton}
             onPress={() => router.push('/')}
@@ -85,11 +66,7 @@ function LayoutContent() {
             style={[styles.tabButton, pathname === '/monitor' && styles.tabButtonActive]}
             onPress={() => router.push('/monitor')}
           >
-            <Ionicons 
-              name="pulse" 
-              size={24} 
-              color={pathname === '/monitor' ? '#2196F3' : '#666'} 
-            />
+            <Ionicons name="pulse" size={24} color={pathname === '/monitor' ? '#2196F3' : '#666'} />
             <Text style={[styles.tabLabel, pathname === '/monitor' && styles.tabLabelActive]}>
               Monitor
             </Text>
@@ -99,44 +76,22 @@ function LayoutContent() {
             style={[styles.tabButton, pathname === '/charts' && styles.tabButtonActive]}
             onPress={() => router.push('/charts')}
           >
-            <Ionicons 
-              name="stats-chart" 
-              size={24} 
-              color={pathname === '/charts' ? '#2196F3' : '#666'} 
-            />
+            <Ionicons name="stats-chart" size={24} color={pathname === '/charts' ? '#2196F3' : '#666'} />
             <Text style={[styles.tabLabel, pathname === '/charts' && styles.tabLabelActive]}>
               Charts
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.tabButton, pathname === '/analysis' && styles.tabButtonActive]}
-            onPress={() => router.push('/analysis')}
-          >
-            <Ionicons 
-              name="analytics" 
-              size={24} 
-              color={pathname === '/analysis' ? '#2196F3' : '#666'} 
-            />
-            <Text style={[styles.tabLabel, pathname === '/analysis' && styles.tabLabelActive]}>
-              Analysis
-            </Text>
-          </TouchableOpacity>
-
-          {/* User Profile Button */}
-          <TouchableOpacity 
-            style={[styles.tabButton, pathname === '/profile' && styles.tabButtonActive]}
-            onPress={() => router.push('/profile')}
-          >
-            <Ionicons 
-              name="person-circle-outline" 
-              size={24} 
-              color={pathname === '/profile' ? '#2196F3' : '#666'} 
-            />
-            <Text style={[styles.tabLabel, pathname === '/profile' && styles.tabLabelActive]}>
-              Profile
-            </Text>
-          </TouchableOpacity>
+<TouchableOpacity 
+  style={[styles.tabButton, pathname === '/record' && styles.tabButtonActive]}
+  onPress={() => router.push('/record')}
+>
+  <Ionicons name="radio-button-on" size={24} color={pathname === '/record' ? '#2196F3' : '#666'} />
+  <Text style={[styles.tabLabel, pathname === '/record' && styles.tabLabelActive]}>
+    Record
+  </Text>
+</TouchableOpacity>
+          
         </Animated.View>
       )}
     </View>
@@ -147,7 +102,7 @@ export default function RootLayout() {
   return (
     <UserProfileProvider>
       <ResearchSessionProvider>
-        <EEGDataProvider> {/* ADD THIS WRAPPER */}
+        <EEGDataProvider>
           <BleProvider>
             <LayoutContent />
           </BleProvider>
@@ -187,10 +142,6 @@ const styles = StyleSheet.create({
   tabButtonActive: {
     opacity: 1,
   },
-  tabIcon: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
   tabLabel: {
     fontSize: 11,
     color: '#666',
@@ -200,4 +151,4 @@ const styles = StyleSheet.create({
     color: '#2196F3',
     fontWeight: '700',
   },
-});
+})  

@@ -2,54 +2,20 @@ import React, { createContext, useState, useContext } from 'react';
 
 const ResearchSessionContext = createContext();
 
-// Structure for a single subject's data
 const createEmptySubject = () => ({
-  // Basic Info
   subjectId: '',
   subjectName: '',
   age: '',
   gender: '',
   registrationDate: null,
-  
-  // Assessment Data
-  personalityTest: {
-    completed: false,
-    timestamp: null,
-    scores: {
-      openmindedness: null,
-      conscientiousness: null,
-      extraversion: null,
-      agreeableness: null,
-      negativeemotionality: null
-    }
-  },
-  
-  iafCalibration: {
-    completed: false,
-    timestamp: null,
-    iaf: null
-  },
-  
-  // Recording Sessions
   sessions: []
-  // Each session = { 
-  //   sessionId, 
-  //   date, 
-  //   conditions: [{ musicCode, audioFile, duration, dataPoints: [...] }] 
-  // }
 });
 
 export function ResearchSessionProvider({ children }) {
-  // Current subject being registered/assessed
   const [currentSubject, setCurrentSubject] = useState(createEmptySubject());
-  
-  // All registered subjects (for multi-subject management)
   const [allSubjects, setAllSubjects] = useState([]);
-  
-  // Current recording session state
   const [currentSession, setCurrentSession] = useState(null);
 
-  // Update current subject's basic info
   const updateSubjectInfo = (info) => {
     setCurrentSubject(prev => ({
       ...prev,
@@ -58,43 +24,15 @@ export function ResearchSessionProvider({ children }) {
     }));
   };
 
-  // Save personality test results
-  const savePersonalityTest = (scores) => {
-    setCurrentSubject(prev => ({
-      ...prev,
-      personalityTest: {
-        completed: true,
-        timestamp: new Date().toISOString(),
-        scores: scores
-      }
-    }));
-  };
-
-  // Save IAF calibration results
-  const saveIAFCalibration = (iafData) => {
-    setCurrentSubject(prev => ({
-      ...prev,
-      iafCalibration: {
-        completed: true,
-        timestamp: new Date().toISOString(),
-        iaf: iafData.iaf
-      }
-    }));
-  };
-
-  // Check if current subject's assessment is complete
   const isAssessmentComplete = () => {
-    return (
+    return !!(
       currentSubject.subjectId &&
       currentSubject.subjectName &&
       currentSubject.age &&
-      currentSubject.gender &&
-      currentSubject.personalityTest.completed &&
-      currentSubject.iafCalibration.completed
+      currentSubject.gender
     );
   };
 
-  // Complete subject registration and add to subjects list
   const completeSubjectRegistration = () => {
     if (isAssessmentComplete()) {
       setAllSubjects(prev => [...prev, { ...currentSubject }]);
@@ -103,7 +41,6 @@ export function ResearchSessionProvider({ children }) {
     return false;
   };
 
-  // Load existing subject for new recording session
   const loadSubject = (subjectId) => {
     const subject = allSubjects.find(s => s.subjectId === subjectId);
     if (subject) {
@@ -113,7 +50,6 @@ export function ResearchSessionProvider({ children }) {
     return false;
   };
 
-  // Start new recording session
   const startRecordingSession = () => {
     const sessionId = `session_${Date.now()}`;
     const newSession = {
@@ -126,10 +62,8 @@ export function ResearchSessionProvider({ children }) {
     return sessionId;
   };
 
-  // Add recording condition to current session
   const addRecordingCondition = (conditionData) => {
     if (!currentSession) return false;
-    
     setCurrentSession(prev => ({
       ...prev,
       conditions: [...prev.conditions, conditionData]
@@ -137,62 +71,36 @@ export function ResearchSessionProvider({ children }) {
     return true;
   };
 
-  // Complete recording session and save to subject
   const completeRecordingSession = () => {
     if (!currentSession) return false;
     
-    // Update subject with new session
     const updatedSubject = {
       ...currentSubject,
       sessions: [...currentSubject.sessions, currentSession]
     };
     
     setCurrentSubject(updatedSubject);
-    
-    // Update in all subjects list
     setAllSubjects(prev => 
-      prev.map(s => 
-        s.subjectId === updatedSubject.subjectId ? updatedSubject : s
-      )
+      prev.map(s => s.subjectId === updatedSubject.subjectId ? updatedSubject : s)
     );
-    
     setCurrentSession(null);
     return true;
   };
 
-  // Export data as CSV format
   const exportToCSV = () => {
-    // This will be implemented in the export screen
-    // Returns formatted CSV strings for:
-    // 1. subjects_info.csv
-    // 2. eeg_data.csv
-    // 3. music_codes.csv
-    
     const subjectsCSV = generateSubjectsCSV();
     const eegDataCSV = generateEEGDataCSV();
     const musicCodesCSV = generateMusicCodesCSV();
-    
-    return {
-      subjectsCSV,
-      eegDataCSV,
-      musicCodesCSV
-    };
+    return { subjectsCSV, eegDataCSV, musicCodesCSV };
   };
 
-  // Generate subjects_info.csv content
   const generateSubjectsCSV = () => {
     const headers = [
       'subject_id',
       'subject_name',
       'age',
       'gender',
-      'test_date',
-      'openness',
-      'conscientiousness',
-      'extraversion',
-      'agreeableness',
-      'neuroticism',
-      'iaf_frequency'
+      'registration_date',
     ];
     
     const rows = allSubjects.map(subject => [
@@ -200,21 +108,12 @@ export function ResearchSessionProvider({ children }) {
       subject.subjectName,
       subject.age,
       subject.gender,
-      subject.personalityTest.timestamp?.split('T')[0] || '',
-      subject.personalityTest.scores.openmindedness || '',
-      subject.personalityTest.scores.conscientiousness || '',
-      subject.personalityTest.scores.extraversion || '',
-      subject.personalityTest.scores.agreeableness || '',
-      subject.personalityTest.scores.negativeemotionality || '',
-      subject.iafCalibration.iaf || ''
+      subject.registrationDate?.split('T')[0] || '',
     ]);
     
-    return [headers, ...rows]
-      .map(row => row.join(','))
-      .join('\n');
+    return [headers, ...rows].map(row => row.join(',')).join('\n');
   };
 
-  // Generate eeg_data.csv content
   const generateEEGDataCSV = () => {
     const headers = [
       'subject_id',
@@ -249,20 +148,12 @@ export function ResearchSessionProvider({ children }) {
       });
     });
     
-    return [headers, ...rows]
-      .map(row => row.join(','))
-      .join('\n');
+    return [headers, ...rows].map(row => row.join(',')).join('\n');
   };
 
-  // Generate music_codes.csv content
   const generateMusicCodesCSV = () => {
-    const headers = [
-      'music_code',
-      'frequency_hz',
-      'description'
-    ];
+    const headers = ['music_code', 'frequency_hz', 'description'];
     
-    // Collect unique music codes from all sessions
     const musicCodes = new Set();
     allSubjects.forEach(subject => {
       subject.sessions?.forEach(session => {
@@ -280,78 +171,49 @@ export function ResearchSessionProvider({ children }) {
     
     const rows = Array.from(musicCodes)
       .map(item => JSON.parse(item))
-      .map(item => [
-        item.code,
-        item.frequency,
-        item.description
-      ]);
+      .map(item => [item.code, item.frequency, item.description]);
     
-    return [headers, ...rows]
-      .map(row => row.join(','))
-      .join('\n');
+    return [headers, ...rows].map(row => row.join(',')).join('\n');
   };
 
-  // Get next available subject ID
   const getNextSubjectId = () => {
-    if (allSubjects.length === 0) {
-      return 'S001';
-    }
-    
-    // Extract numbers from existing IDs and find max
+    if (allSubjects.length === 0) return 'S001';
     const numbers = allSubjects
       .map(s => parseInt(s.subjectId.replace('S', '')))
       .filter(n => !isNaN(n));
-    
     const maxNum = Math.max(...numbers);
     return `S${String(maxNum + 1).padStart(3, '0')}`;
   };
 
-  // Reset current subject (start fresh)
   const resetCurrentSubject = () => {
     setCurrentSubject(createEmptySubject());
     setCurrentSession(null);
   };
 
-  // Get statistics
   const getStats = () => {
-    const totalSubjects = allSubjects.length;
-    const totalSessions = allSubjects.reduce(
-      (sum, subject) => sum + (subject.sessions?.length || 0), 
-      0
-    );
-    
     return {
-      totalSubjects,
-      totalSessions
+      totalSubjects: allSubjects.length,
+      totalSessions: allSubjects.reduce(
+        (sum, subject) => sum + (subject.sessions?.length || 0), 0
+      )
     };
   };
 
   return (
     <ResearchSessionContext.Provider value={{
-      // Current subject state
       currentSubject,
       updateSubjectInfo,
-      savePersonalityTest,
-      saveIAFCalibration,
       isAssessmentComplete,
       resetCurrentSubject,
-      
-      // Subject management
       allSubjects,
       completeSubjectRegistration,
       loadSubject,
       getNextSubjectId,
-      
-      // Recording session
       currentSession,
       startRecordingSession,
       addRecordingCondition,
       completeRecordingSession,
-      
-      // Export
       exportToCSV,
-      
-      // Stats
       getStats
     }}>
       {children}

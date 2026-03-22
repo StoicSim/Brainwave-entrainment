@@ -1,7 +1,5 @@
-// Updated AnalysisScreen.jsx with Combined Recording Mode
-
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, TextInput, Switch } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useBleContext } from '../context/BleContext';
 import { useUserProfile } from '../context/UserProfileContext';
@@ -20,9 +18,9 @@ export default function AnalysisScreen() {
   } = useEEGData();
 
   const [isRecording, setIsRecording] = useState(false);
-  const [currentPhase, setCurrentPhase] = useState('no_music'); // 'no_music' or 'music'
-  const [noMusicData, setNoMusicData] = useState([]); // Data from first recording
-  const [musicData, setMusicData] = useState([]); // Data from second recording
+  const [currentPhase, setCurrentPhase] = useState('no_music');
+  const [noMusicData, setNoMusicData] = useState([]);
+  const [musicData, setMusicData] = useState([]);
   const [recordingStartTime, setRecordingStartTime] = useState(null);
   const [musicLink, setMusicLink] = useState('');
   const [showSessions, setShowSessions] = useState(false);
@@ -31,20 +29,16 @@ export default function AnalysisScreen() {
   const eegProcessor = useRef(new EEGProcessor(512, 512)).current;
   const recordingInterval = useRef(null);
 
-  // Check profile completion
   const isProfileComplete = () => {
-    return userProfile.profileComplete && 
-           userProfile.name && 
-           userProfile.age && 
-           userProfile.iafCalibration?.iaf;
+    // return !!(userProfile.name && userProfile.age && userProfile.gender);
+    return true;
   };
 
-  // Start recording
   const handleStartRecording = () => {
     if (!isProfileComplete()) {
       Alert.alert(
         'Profile Incomplete',
-        'Please complete your profile (name, age, personality test, and IAF calibration) before recording sessions.',
+        'Please complete your profile (name, age, gender) before recording sessions.',
         [{ text: 'OK' }]
       );
       return;
@@ -59,7 +53,6 @@ export default function AnalysisScreen() {
     setIsRecording(true);
     setRecordingStartTime(startTime);
 
-    // Capture data every 1 second
     recordingInterval.current = setInterval(() => {
       captureDataPoint();
     }, 1000);
@@ -72,12 +65,8 @@ export default function AnalysisScreen() {
     );
   };
 
-  // Capture a single data point
   const captureDataPoint = () => {
-    if (rawEEGBuffer.length < 512) {
-      console.log('Insufficient buffer for data point');
-      return;
-    }
+    if (rawEEGBuffer.length < 512) return;
 
     try {
       const psd = eegProcessor.computePSD(rawEEGBuffer);
@@ -101,22 +90,19 @@ export default function AnalysisScreen() {
         }
       }
 
-      const metricsSnapshot = {
-        signalQuality: metrics.poorSignal,
-        attention: metrics.attention,
-        meditation: metrics.meditation
-      };
-
       const dataPoint = {
-        timestamp: new Date().toISOString(), // Absolute ISO timestamp
+        timestamp: new Date().toISOString(),
         sessionType: currentPhase,
         musicLink: currentPhase === 'music' ? musicLink : '',
         bandPowers,
         psdPoints,
-        metrics: metricsSnapshot
+        metrics: {
+          signalQuality: metrics.poorSignal,
+          attention: metrics.attention,
+          meditation: metrics.meditation
+        }
       };
 
-      // Store in appropriate array based on current phase
       if (currentPhase === 'no_music') {
         setNoMusicData(prev => [...prev, dataPoint]);
       } else {
@@ -128,7 +114,6 @@ export default function AnalysisScreen() {
     }
   };
 
-  // Stop recording
   const handleStopRecording = () => {
     if (!isRecording) return;
 
@@ -139,16 +124,8 @@ export default function AnalysisScreen() {
 
     setIsRecording(false);
 
-    const currentData = currentPhase === 'no_music' ? noMusicData : musicData;
-    
-    if (currentData.length === 0) {
-      Alert.alert('No Data', 'No data was recorded. Please try again.');
-      return;
-    }
-
     const duration = ((Date.now() - recordingStartTime) / 1000).toFixed(1);
 
-    // Show different options based on current phase
     if (currentPhase === 'no_music') {
       Alert.alert(
         'Recording Stopped',
@@ -162,18 +139,11 @@ export default function AnalysisScreen() {
               setRecordingStartTime(null);
             }
           },
-          { 
-            text: 'Save & Finish', 
-            onPress: handleSaveSession
-          },
-          { 
-            text: 'Continue with Music', 
-            onPress: handleContinueWithMusic
-          }
+          { text: 'Save and Finish', onPress: handleSaveSession },
+          { text: 'Continue with Music', onPress: handleContinueWithMusic }
         ]
       );
     } else {
-      // Music phase completed
       Alert.alert(
         'Recording Stopped',
         `Recorded ${musicData.length} data points (${duration}s) WITH music.\n\nReady to save combined session?`,
@@ -181,42 +151,32 @@ export default function AnalysisScreen() {
           { 
             text: 'Cancel', 
             style: 'cancel',
-            onPress: () => {
-              setMusicData([]);
-            }
+            onPress: () => setMusicData([])
           },
-          { 
-            text: 'Save & Export', 
-            onPress: handleSaveSession
-          }
+          { text: 'Save and Export', onPress: handleSaveSession }
         ]
       );
     }
   };
 
-  // Continue with music recording
   const handleContinueWithMusic = () => {
     setShowMusicLinkInput(true);
   };
 
-  // Start music recording after link is entered
   const handleStartMusicRecording = () => {
     if (!musicLink.trim()) {
       Alert.alert('Music Link Required', 'Please enter a music link before continuing.');
       return;
     }
-
     setCurrentPhase('music');
     setShowMusicLinkInput(false);
-    
     Alert.alert(
       'Ready to Record WITH Music',
-      'Press "Start Recording" to begin recording with music playing.',
+      'Press Start Recording to begin recording with music playing.',
       [{ text: 'OK' }]
     );
   };
 
-  // Save session (handles both single and combined)
   const handleSaveSession = async () => {
     const allData = [...noMusicData, ...musicData];
     
@@ -226,29 +186,20 @@ export default function AnalysisScreen() {
     }
 
     try {
-      // Save session
       const savedSession = await saveSession(
         userProfile,
-        allData, // Combined data from both phases
+        allData,
         recordingStartTime
       );
 
-      // Export immediately
       await exportSession(savedSession);
-
-      const totalPoints = allData.length;
-      const noMusicCount = noMusicData.length;
-      const musicCount = musicData.length;
 
       Alert.alert(
         'Success!',
-        `Session saved and exported!\n\nTotal: ${totalPoints} data points\n` +
-        `Without music: ${noMusicCount}\n` +
-        `With music: ${musicCount}`,
+        `Session saved and exported!\n\nTotal: ${allData.length} data points\nWithout music: ${noMusicData.length}\nWith music: ${musicData.length}`,
         [{ text: 'OK' }]
       );
 
-      // Reset all state
       setNoMusicData([]);
       setMusicData([]);
       setRecordingStartTime(null);
@@ -262,7 +213,6 @@ export default function AnalysisScreen() {
     }
   };
 
-  // Clean up on unmount
   useEffect(() => {
     return () => {
       if (recordingInterval.current) {
@@ -293,9 +243,8 @@ export default function AnalysisScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>EEG Recording & Export</Text>
+        <Text style={styles.headerTitle}>EEG Recording and Export</Text>
         <Text style={styles.headerSubtitle}>
           {device ? `${sessions.length} sessions saved` : 'Connect device to record'}
         </Text>
@@ -325,7 +274,7 @@ export default function AnalysisScreen() {
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Buffer Size:</Text>
-                  <Text style={styles.infoValue}>{rawEEGBuffer.length} samples</Text>
+                  <Text style={styles.infoValue}>{`${rawEEGBuffer.length} samples`}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Signal Quality:</Text>
@@ -333,35 +282,29 @@ export default function AnalysisScreen() {
                     styles.infoValue,
                     { color: metrics.poorSignal < 50 ? '#4CAF50' : '#F44336' }
                   ]}>
-                    {metrics.poorSignal < 50 ? 'Good' : metrics.poorSignal < 100 ? 'Fair' : 'Poor'} ({metrics.poorSignal})
+                    {`${metrics.poorSignal < 50 ? 'Good' : metrics.poorSignal < 100 ? 'Fair' : 'Poor'} (${metrics.poorSignal})`}
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Attention:</Text>
-                  <Text style={styles.infoValue}>{metrics.attention}</Text>
+                  <Text style={styles.infoValue}>{`${metrics.attention}`}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Meditation:</Text>
-                  <Text style={styles.infoValue}>{metrics.meditation}</Text>
+                  <Text style={styles.infoValue}>{`${metrics.meditation}`}</Text>
                 </View>
                 {isRecording && (
                   <>
                     <View style={styles.infoRow}>
                       <Text style={styles.infoLabel}>Recording:</Text>
                       <Text style={[styles.infoValue, { color: '#F44336' }]}>
-                        🔴 Active
+                        {'🔴 Active'}
                       </Text>
                     </View>
                     <View style={styles.infoRow}>
                       <Text style={styles.infoLabel}>Current Points:</Text>
                       <Text style={styles.infoValue}>
-                        {currentPhase === 'no_music' ? noMusicData.length : musicData.length}
-                      </Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Duration:</Text>
-                      <Text style={styles.infoValue}>
-                        {recordingStartTime ? ((Date.now() - recordingStartTime) / 1000).toFixed(1) : '0.0'}s
+                        {`${currentPhase === 'no_music' ? noMusicData.length : musicData.length}`}
                       </Text>
                     </View>
                   </>
@@ -370,11 +313,11 @@ export default function AnalysisScreen() {
                   <>
                     <View style={styles.infoRow}>
                       <Text style={styles.infoLabel}>No Music Data:</Text>
-                      <Text style={styles.infoValue}>{noMusicData.length} points</Text>
+                      <Text style={styles.infoValue}>{`${noMusicData.length} points`}</Text>
                     </View>
                     <View style={styles.infoRow}>
                       <Text style={styles.infoLabel}>Music Data:</Text>
-                      <Text style={styles.infoValue}>{musicData.length} points</Text>
+                      <Text style={styles.infoValue}>{`${musicData.length} points`}</Text>
                     </View>
                   </>
                 )}
@@ -388,7 +331,7 @@ export default function AnalysisScreen() {
                 >
                   <Ionicons name="play-circle" size={24} color="#fff" />
                   <Text style={styles.buttonText}>
-                    Start Recording {currentPhase === 'music' ? '(With Music)' : ''}
+                    {currentPhase === 'music' ? 'Start Recording (With Music)' : 'Start Recording'}
                   </Text>
                 </TouchableOpacity>
               ) : (
@@ -403,12 +346,12 @@ export default function AnalysisScreen() {
 
               {totalRecordedPoints > 0 && !isRecording && !showMusicLinkInput && (
                 <View style={styles.resultsCard}>
-                  <Text style={styles.resultsTitle}>📊 Recorded Data Ready</Text>
+                  <Text style={styles.resultsTitle}>{'📊 Recorded Data Ready'}</Text>
                   <Text style={styles.resultsText}>
-                    Total: {totalRecordedPoints} data points
+                    {`Total: ${totalRecordedPoints} data points`}
                   </Text>
                   <Text style={styles.resultsSubtext}>
-                    No Music: {noMusicData.length} | Music: {musicData.length}
+                    {`No Music: ${noMusicData.length} / Music: ${musicData.length}`}
                   </Text>
                 </View>
               )}
@@ -418,7 +361,6 @@ export default function AnalysisScreen() {
             {showMusicLinkInput && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Enter Music Information</Text>
-                
                 <View style={styles.musicCard}>
                   <Text style={styles.inputLabel}>Music Link:</Text>
                   <TextInput
@@ -431,9 +373,8 @@ export default function AnalysisScreen() {
                     autoFocus
                   />
                   <Text style={styles.inputHint}>
-                    Enter the link to the music you'll be playing
+                    Enter the link to the music you will be playing
                   </Text>
-
                   <View style={styles.buttonRow}>
                     <TouchableOpacity
                       style={[styles.button, styles.cancelButton]}
@@ -458,7 +399,7 @@ export default function AnalysisScreen() {
             {/* Saved Sessions Section */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Saved Sessions ({sessions.length})</Text>
+                <Text style={styles.sectionTitle}>{`Saved Sessions (${sessions.length})`}</Text>
                 <TouchableOpacity onPress={() => setShowSessions(!showSessions)}>
                   <Ionicons 
                     name={showSessions ? "chevron-up" : "chevron-down"} 
@@ -488,7 +429,7 @@ export default function AnalysisScreen() {
                       <View key={session.id} style={styles.sessionCard}>
                         <View style={styles.sessionHeader}>
                           <Text style={styles.sessionTitle}>
-                            {session.userProfile.name} - {new Date(session.timestamp).toLocaleDateString()}
+                            {`${session.userProfile.name} - ${new Date(session.timestamp).toLocaleDateString()}`}
                           </Text>
                           <View style={styles.sessionActions}>
                             <TouchableOpacity
@@ -508,17 +449,16 @@ export default function AnalysisScreen() {
                         
                         <View style={styles.sessionDetails}>
                           <Text style={styles.sessionDetailText}>
-                            Age: {session.userProfile.age} | IAF: {session.userProfile.iaf?.toFixed(2)} Hz
+                            {`Age: ${session.userProfile.age} | Gender: ${session.userProfile.gender}`}
                           </Text>
                           <Text style={styles.sessionDetailText}>
-                            Total Points: {session.dataPoints?.length || 0} 
-                            {musicCount > 0 && ` (🔇 ${noMusicCount} | 🎵 ${musicCount})`}
+                            {`Total Points: ${session.dataPoints?.length || 0}${musicCount > 0 ? ` (No Music: ${noMusicCount} / Music: ${musicCount})` : ''}`}
                           </Text>
                           <Text style={styles.sessionDetailText}>
-                            Type: {musicCount > 0 ? 'Combined Session' : 'Single Session'}
+                            {`Type: ${musicCount > 0 ? 'Combined Session' : 'Single Session'}`}
                           </Text>
                           <Text style={styles.sessionDetailText}>
-                            Time: {new Date(session.timestamp).toLocaleTimeString()}
+                            {`Time: ${new Date(session.timestamp).toLocaleTimeString()}`}
                           </Text>
                         </View>
                       </View>

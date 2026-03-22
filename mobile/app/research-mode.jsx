@@ -1,29 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useResearchSession } from '../context/ResearchSessionContext';
 
 export default function ResearchModeScreen() {
   const router = useRouter();
+  const { getStats, allSubjects } = useResearchSession();
   const [subjects, setSubjects] = useState([]);
-  const [stats, setStats] = useState({
-    totalSubjects: 0,
-    totalSessions: 0
-  });
+  const [stats, setStats] = useState({ totalSubjects: 0, totalSessions: 0 });
 
   useEffect(() => {
-    // Load subjects from storage (we'll implement this later)
-    loadSubjects();
-  }, []);
-
-  const loadSubjects = () => {
-    // Placeholder - will load from storage later
-    // For now, empty state
-    setSubjects([]);
-    setStats({
-      totalSubjects: 0,
-      totalSessions: 0
-    });
-  };
+    const currentStats = getStats();
+    setSubjects(allSubjects);
+    setStats(currentStats);
+  }, [allSubjects]);
 
   const handleNewSubject = () => {
     router.push('/research/new-subject');
@@ -53,19 +43,18 @@ export default function ResearchModeScreen() {
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Text style={styles.backButtonText}>← Back</Text>
+            <Text style={styles.backButtonText}>{'<-'} Back</Text>
           </TouchableOpacity>
-          <Text style={styles.title}> Research Data Collection</Text>
-          <Text style={styles.subtitle}>IAF & Personality Entrainment Study</Text>
+          <Text style={styles.title}>Research Data Collection</Text>
+          <Text style={styles.subtitle}>EEG Brainwave Entrainment Study</Text>
         </View>
 
         {/* Instructions Box */}
         <View style={styles.instructionsBox}>
           <Text style={styles.instructionsTitle}>Instructions for Researchers:</Text>
           <Text style={styles.instructionItem}>1. Enter subject information</Text>
-          <Text style={styles.instructionItem}>2. Complete assessment tests</Text>
-          <Text style={styles.instructionItem}>3. Collect baseline & conditions</Text>
-          <Text style={styles.instructionItem}>4. Export CSV files</Text>
+          <Text style={styles.instructionItem}>2. Collect baseline and conditions</Text>
+          <Text style={styles.instructionItem}>3. Export CSV files</Text>
         </View>
 
         {/* Stats Dashboard */}
@@ -98,7 +87,7 @@ export default function ResearchModeScreen() {
           <View style={styles.modeContent}>
             <Text style={styles.modeTitle}>Existing Subject</Text>
             <Text style={styles.modeDescription}>
-              Continue with previously registered subject's profile
+              Continue with a previously registered subject
             </Text>
             {subjects.length > 0 && (
               <Text style={styles.modeSubtext}>
@@ -106,7 +95,7 @@ export default function ResearchModeScreen() {
               </Text>
             )}
           </View>
-          <Text style={styles.modeArrow}>→</Text>
+          <Text style={styles.modeArrow}>{'>'}</Text>
         </TouchableOpacity>
 
         {/* New Subject Card */}
@@ -121,25 +110,21 @@ export default function ResearchModeScreen() {
           <View style={styles.modeContent}>
             <Text style={styles.modeTitle}>New Subject</Text>
             <Text style={styles.modeDescription}>
-              Register and assess a new subject
+              Register and begin data collection for a new subject
             </Text>
             <Text style={styles.modeSubtext}>
-              ~20 min for complete assessment
+              ~5 min for registration
             </Text>
           </View>
-          <Text style={styles.modeArrow}>→</Text>
+          <Text style={styles.modeArrow}>{'>'}</Text>
         </TouchableOpacity>
 
         {/* Quick Info */}
         <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>📊 Data Collection Process</Text>
-          <Text style={styles.infoText}>
-            Each subject requires:
-          </Text>
-          <Text style={styles.infoItem}>• Basic info (name, age, gender)</Text>
-          <Text style={styles.infoItem}>• Personality test (15 min)</Text>
-          <Text style={styles.infoItem}>• IAF calibration (2 min)</Text>
-          <Text style={styles.infoItem}>• EEG recordings (multiple sessions)</Text>
+          <Text style={styles.infoTitle}>Data Collection Process</Text>
+          <Text style={styles.infoText}>Each subject requires:</Text>
+          <Text style={styles.infoItem}>- Basic info (name, age, gender)</Text>
+          <Text style={styles.infoItem}>- EEG recordings (multiple sessions)</Text>
           <Text style={styles.infoText}>
             All data exports to CSV format for analysis.
           </Text>
@@ -151,7 +136,7 @@ export default function ResearchModeScreen() {
       <View style={styles.footer}>
         <Text style={styles.footerText}>Research Mode</Text>
         <Text style={styles.footerSubtext}>
-          Multi-subject data collection & CSV export
+          Multi-subject data collection and CSV export
         </Text>
       </View>
     </View>

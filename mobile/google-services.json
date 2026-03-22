@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "373274382974",
+    "project_id": "brainwave-entrainment-c9fe9",
+    "storage_bucket": "brainwave-entrainment-c9fe9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:373274382974:android:b94282678d3f1ed16e7e2f",
+        "android_client_info": {
+          "package_name": "com.simran_maharjan.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "373274382974-1nt50efsspvglf3o1vm8kp9rb7i0l4ms.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.simran_maharjan.mobile",
+            "certificate_hash": "7f0aea930b231b34f8e55958ecc98bae12e509af"
+          }
+        },
+        {
+          "client_id": "373274382974-q69h1op74uqlckp9j6051kv31nl2vhal.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCAsfsT13G4pbffyGP9an0DW6Nn-V-swTI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "373274382974-q69h1op74uqlckp9j6051kv31nl2vhal.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -6,7 +6,6 @@ import { BLE_CONFIG } from '../constants/BleConfig';
 
 const manager = new BleManager();
 
-
 const requestPermissions = async () => {
   if (Platform.OS === 'android') {
     if (Platform.Version >= 31) {
@@ -45,38 +44,56 @@ const requestPermissions = async () => {
   return true;
 };
 
-
-export const scanAndConnect = async (onDeviceFound) => {
-  const isPermitted = await requestPermissions();
-  if (!isPermitted) {
-    throw new Error('Bluetooth permissions not granted');
-  }
-
-  console.log('Starting BLE scan...');
-  
-  manager.startDeviceScan(
-    null,
-    { allowDuplicates: false },
-    (error, device) => {
-      if (error) {
-        console.error('Scanning Error:', error);
-        manager.stopDeviceScan();
-        throw error;
+export const scanAndConnect = (onDeviceFound) => {
+  // Return a Promise so errors in the scan callback can propagate correctly
+  return new Promise(async (resolve, reject) => {
+    try {
+      const isPermitted = await requestPermissions();
+      if (!isPermitted) {
+        return reject(new Error('Bluetooth permissions not granted'));
       }
 
-      const matchesMac = device.id === BLE_CONFIG.DEVICE_MAC_ADDRESS;
-      const matchesName = BLE_CONFIG.DEVICE_NAME_FILTER && 
-                          device.name === BLE_CONFIG.DEVICE_NAME_FILTER;
+      console.log('Starting BLE scan...');
 
-      if (matchesMac || matchesName) {
-        console.log(`Found target device: ${device.name} (${device.id})`);
-        manager.stopDeviceScan();
-        onDeviceFound(device);
-      }
+      manager.startDeviceScan(
+        null,
+        { allowDuplicates: false },
+        (error, device) => {
+          if (error) {
+  console.warn('Scanning Error:', error.message);  // ✅ no red banner
+  manager.stopDeviceScan();
+  return reject(error);
+}
+
+          if (!device) return;
+
+          const matchesMac = device.id === BLE_CONFIG.DEVICE_MAC_ADDRESS;
+          const matchesName =
+            BLE_CONFIG.DEVICE_NAME_FILTER &&
+            device.name === BLE_CONFIG.DEVICE_NAME_FILTER;
+
+          if (matchesMac || matchesName) {
+            console.log(`Found target device: ${device.name} (${device.id})`);
+            manager.stopDeviceScan();
+            resolve(); // ✅ resolve before calling onDeviceFound
+            onDeviceFound(device);
+          }
+        }
+      );
+    } catch (error) {
+      manager.stopDeviceScan();
+      reject(error);
     }
-  );
+  });
 };
 
+export const stopScan = () => {
+  try {
+    manager.stopDeviceScan();
+  } catch (e) {
+    console.warn('stopScan error:', e.message);
+  }
+};
 
 export const connectAndMonitor = async (device, onDataReceived) => {
   try {
@@ -107,37 +124,30 @@ export const connectAndMonitor = async (device, onDataReceived) => {
         if (characteristic?.value) {
           try {
             const rawBytes = Buffer.from(characteristic.value, 'base64');
-            
             const packets = decoder.parseStream(rawBytes);
-            
+
             packets.forEach(p => {
               packetCount++;
-              
+
               if (p.checksumValid) {
                 validCount++;
-                
                 onDataReceived(p.parsed);
-                
+
                 if (validCount <= 5) {
                   console.log(`✓ Packet #${validCount}:`, p.parsed);
                 }
-                
                 if (p.parsed.eegBands) {
-                  console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] EEG Bands:`, p.parsed.eegBands);
+                  console.log(`[${p.timestamp.split('T')[1].substring(0, 8)}] EEG Bands:`, p.parsed.eegBands);
                 }
-                
                 if (p.parsed.poorSignal !== undefined) {
-                  console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] Signal Quality: ${p.parsed.poorSignal}/200 (${p.parsed.poorSignal < 50 ? 'GOOD' : 'POOR'})`);
+                  console.log(`[${p.timestamp.split('T')[1].substring(0, 8)}] Signal Quality: ${p.parsed.poorSignal}/200 (${p.parsed.poorSignal < 50 ? 'GOOD' : 'POOR'})`);
                 }
-                
                 if (p.parsed.attention !== undefined || p.parsed.meditation !== undefined) {
-                  console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] Attention: ${p.parsed.attention || 'N/A'}, Meditation: ${p.parsed.meditation || 'N/A'}`);
+                  console.log(`[${p.timestamp.split('T')[1].substring(0, 8)}] Attention: ${p.parsed.attention || 'N/A'}, Meditation: ${p.parsed.meditation || 'N/A'}`);
                 }
-                
                 if (p.parsed.rawEEG !== undefined && validCount <= 10) {
-                  console.log(`[${p.timestamp.split('T')[1].substring(0,8)}] RawEEG: ${p.parsed.rawEEG}`);
+                  console.log(`[${p.timestamp.split('T')[1].substring(0, 8)}] RawEEG: ${p.parsed.rawEEG}`);
                 }
-                
               } else {
                 invalidCount++;
                 if (invalidCount <= 5) {
@@ -145,12 +155,11 @@ export const connectAndMonitor = async (device, onDataReceived) => {
                 }
               }
             });
-            
+
             if (packetCount % 100 === 0 && packetCount > 0) {
               const successRate = ((validCount / packetCount) * 100).toFixed(1);
               console.log(`Stats: ${validCount}/${packetCount} valid (${successRate}%), buffer: ${decoder.getBufferSize()} bytes`);
             }
-            
           } catch (err) {
             console.error('Decoding error:', err);
           }
@@ -160,11 +169,10 @@ export const connectAndMonitor = async (device, onDataReceived) => {
 
     return connectedDevice;
   } catch (error) {
-    console.error('Connection/Streaming Error:', error);
+    console.warn('Connection error (handled):', error.message); // ✅
     throw error;
   }
 };
-
 
 export const disconnectDevice = async (device) => {
   if (device) {
@@ -173,20 +181,19 @@ export const disconnectDevice = async (device) => {
       decoder.reset();
       console.log('Disconnected successfully');
     } catch (error) {
-      console.error('Disconnect error:', error);
+      console.warn('Disconnect error:', error);
     }
   }
 };
-
 
 export const discoverDeviceDetails = async (device) => {
   let connectedDevice = null;
   try {
     console.log(`Discovering details for: ${device.id}`);
-    
+
     connectedDevice = await device.connect();
     await connectedDevice.discoverAllServicesAndCharacteristics();
-    
+
     const services = await connectedDevice.services();
     const detailMap = {};
 
